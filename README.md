@@ -9,7 +9,7 @@ The core engine is written in Rust and exposed to R via [extendr](https://extend
 ## Install
 
 ```r
-pak::pak("your-username/mutantr")
+pak::pak("mcmullarkey/mutantr")
 ```
 
 Requires Rust toolchain (`rustc >= 1.65.0` and `cargo`). Install via [rustup](https://rustup.rs/) if you don't have it.
