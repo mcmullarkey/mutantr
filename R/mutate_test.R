@@ -192,6 +192,9 @@ read_prior_results <- function(output_dir) {
     return(NULL)
   }
 
+  # Subset to required columns to prevent rbind(out, skipped) from breaking
+  # if the JSON report schema ever grows extra columns
+  results <- results[, required_cols]
   results
 }
 

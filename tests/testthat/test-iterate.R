@@ -448,3 +448,93 @@ test_that("iterate with empty prior results runs all mutants", {
   unlink(pkg_dir, recursive = TRUE)
   unlink(out_dir, recursive = TRUE)
 })
+
+test_that("iterate retests previously missed mutants", {
+  # ——— First run with weak tests: miss at least one mutant ———
+  # The function has a FALSE return literal that a weak test never exercises.
+  # The FALSE -> TRUE mutation is MISSED because is_positive(1) returns at
+  # line 3 (TRUE branch) and never reaches line 5.
+  pkg_dir <- tempfile("testpkg")
+  dir.create(pkg_dir)
+  dir.create(file.path(pkg_dir, "R"))
+  dir.create(file.path(pkg_dir, "tests", "testthat"), recursive = TRUE)
+
+  writeLines(c(
+    "Package: testpkg", "Title: Test Package", "Version: 0.0.1",
+    "Description: A test package.", "License: MIT", "Encoding: UTF-8"
+  ), file.path(pkg_dir, "DESCRIPTION"))
+
+  writeLines('exportPattern("^[[:alpha:]]+")', file.path(pkg_dir, "NAMESPACE"))
+
+  writeLines(c(
+    "is_positive <- function(x) {",
+    "  if (x > 0) {",
+    "    return(TRUE)",
+    "  }",
+    "  FALSE",
+    "}"
+  ), file.path(pkg_dir, "R", "math.R"))
+
+  # Weak test: only tests x=1, which takes the TRUE branch at line 3.
+  # The FALSE -> TRUE mutant on line 5 is never reached, so it's "missed".
+  # The > -> <= mutant on line 2 IS caught because 1 <= 0 is FALSE.
+  writeLines(c(
+    'test_that("is_positive works", {',
+    '  expect_true(is_positive(1))',
+    '})'
+  ), file.path(pkg_dir, "tests", "testthat", "test-math.R"))
+
+  writeLines(c(
+    'library(testthat)',
+    'library(testpkg)',
+    'test_check("testpkg")'
+  ), file.path(pkg_dir, "tests", "testthat.R"))
+
+  out_dir <- tempfile("retest_results")
+  dir.create(out_dir)
+
+  # First run
+  utils::capture.output({
+    results1 <- mutate_test(pkg_dir, output_dir = out_dir)
+  }, type = "message")
+
+  # At least one mutant should be "missed" with the weak test
+  expect_true(any(results1$outcome == "missed"),
+              info = "Weak test should miss at least one mutant")
+
+  # The FALSE -> TRUE mutation should be missed specifically
+  false_to_true <- results1[
+    results1$original == "FALSE" & results1$replacement == "TRUE", ]
+  expect_true(nrow(false_to_true) >= 1,
+              info = "FALSE -> TRUE mutant should exist")
+  expect_equal(false_to_true$outcome[1], "missed",
+               info = paste0("FALSE -> TRUE should be missed with weak test",
+                             " (is_positive(1) never reaches line 5)"))
+
+  # ——— Strengthen tests to catch the missed mutant ———
+  # Adding expect_false(is_positive(-1)) triggers the FALSE -> TRUE mutation
+  # because is_positive(-1) falls through to line 5, which is now TRUE.
+  writeLines(c(
+    'test_that("is_positive works", {',
+    '  expect_true(is_positive(1))',
+    '  expect_false(is_positive(-1))',
+    '})'
+  ), file.path(pkg_dir, "tests", "testthat", "test-math.R"))
+
+  # ——— Second run with iterate=TRUE ———
+  utils::capture.output({
+    results2 <- mutate_test(pkg_dir, output_dir = out_dir, iterate = TRUE)
+  }, type = "message")
+
+  # The previously-missed FALSE -> TRUE mutant should now be "caught"
+  false_to_true2 <- results2[
+    results2$original == "FALSE" & results2$replacement == "TRUE", ]
+  expect_true(nrow(false_to_true2) >= 1,
+              info = "Should have FALSE -> TRUE mutant in second results")
+  expect_equal(false_to_true2$outcome[1], "caught",
+               info = paste0("Previously-missed FALSE -> TRUE should now be caught",
+                             " after test strengthening"))
+
+  unlink(pkg_dir, recursive = TRUE)
+  unlink(out_dir, recursive = TRUE)
+})

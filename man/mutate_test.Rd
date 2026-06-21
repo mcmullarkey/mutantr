@@ -4,7 +4,8 @@
 \alias{mutate_test}
 \title{Run mutation testing on an R package}
 \usage{
-mutate_test(pkg_path, timeout = 30, workers = 1, output_dir = NULL)
+mutate_test(pkg_path, timeout = 30, workers = 1, output_dir = NULL,
+  iterate = FALSE)
 }
 \arguments{
 \item{pkg_path}{Path to the root of an R package}
@@ -16,6 +17,10 @@ mutate_test(pkg_path, timeout = 30, workers = 1, output_dir = NULL)
 \item{output_dir}{Optional directory path. When provided, writes
 \code{mutant_results.json} and \code{mutant_results.md} to this directory.
 Default NULL (no file output).}
+
+\item{iterate}{Logical. If \code{TRUE}, skips previously caught/unviable
+mutants from \code{output_dir/mutant_results.json}. Requires
+\code{output_dir} to be set. Default \code{FALSE}.}
 }
 \value{
 A data frame with columns: file, line, original, replacement, outcome.
@@ -28,4 +33,21 @@ Scans the package's R/ directory for mutation sites, applies each mutation
 one at a time, runs the test suite, and classifies outcomes. Uses parallel
 workers for speed: each worker gets one persistent copy of the package
 and mutates files in-place (reverting after each test).
+}
+\details{
+If a \code{.mutantr.toml} config file exists in \code{pkg_path}, its values
+are merged with the explicit arguments following this priority:
+explicit args > config > defaults. Only keys that match function parameter
+names (\code{timeout}, \code{workers}, \code{output_dir}, \code{iterate})
+are applied. Config keys for unimplemented features (\code{exclude},
+\code{in_diff}) are accepted but silently ignored.
+
+When \code{iterate = TRUE}, the function reads prior results from
+\code{output_dir/mutant_results.json} and skips mutants that were previously
+classified as \code{"caught"} or \code{"unviable"}. Only mutants that were
+previously \code{"missed"}, \code{"timeout"}, or are entirely new are
+re-tested. Skipped mutants appear in the output with their prior outcome,
+ensuring row completeness. This enables an iterative workflow: run mutation
+testing, improve test coverage for missed mutants, and re-run with
+\code{iterate = TRUE} to focus only on the remaining gaps.
 }
