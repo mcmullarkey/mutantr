@@ -4,18 +4,28 @@
 \alias{mutate_test}
 \title{Run mutation testing on an R package}
 \usage{
-mutate_test(pkg_path, timeout = 30)
+mutate_test(pkg_path, timeout = 30, workers = 1, output_dir = NULL)
 }
 \arguments{
 \item{pkg_path}{Path to the root of an R package}
 
 \item{timeout}{Timeout in seconds per mutant test run (default: 30)}
+
+\item{workers}{Number of parallel workers (default: 1)}
+
+\item{output_dir}{Optional directory path. When provided, writes
+\code{mutant_results.json} and \code{mutant_results.md} to this directory.
+Default NULL (no file output).}
 }
 \value{
-A data frame with columns: file, line, original, replacement, outcome
+A data frame with columns: file, line, original, replacement, outcome.
+The outcome column classifies each mutant as \code{"caught"} (test failure),
+\code{"missed"} (no test failure), \code{"unviable"} (source/load error,
+including missing files or bad R syntax), or \code{"timeout"}.
 }
 \description{
 Scans the package's R/ directory for mutation sites, applies each mutation
-one at a time to a temporary copy of the package, runs the test suite, and
-classifies outcomes.
+one at a time, runs the test suite, and classifies outcomes. Uses parallel
+workers for speed: each worker gets one persistent copy of the package
+and mutates files in-place (reverting after each test).
 }
