@@ -122,33 +122,31 @@ validate_args <- function(parsed) {
   }
   validated$pkg <- parsed$pkg
 
-  # --timeout: default 30, must be numeric if provided
-  if (is.null(parsed$timeout)) {
-    validated$timeout <- 30
-  } else {
+  # --timeout: validate if supplied, leave NULL to let mutate_test() merge config/defaults
+  if (!is.null(parsed$timeout)) {
     timeout_num <- suppressWarnings(as.numeric(parsed$timeout))
     if (is.na(timeout_num)) {
       stop("--timeout must be numeric, got: ", parsed$timeout, call. = FALSE)
     }
-    if (!is.na(timeout_num) && timeout_num <= 0) {
+    if (timeout_num <= 0) {
       stop("--timeout must be positive, got: ", timeout_num, call. = FALSE)
     }
     validated$timeout <- timeout_num
   }
+  # else: validated$timeout stays NULL (from validated <- parsed)
 
-  # --workers: default 1, must be integer if provided
-  if (is.null(parsed$workers)) {
-    validated$workers <- 1L
-  } else {
+  # --workers: validate if supplied, leave NULL to let mutate_test() merge config/defaults
+  if (!is.null(parsed$workers)) {
     workers_int <- suppressWarnings(as.integer(parsed$workers))
     if (is.na(workers_int)) {
       stop("--workers must be an integer, got: ", parsed$workers, call. = FALSE)
     }
-    if (!is.na(workers_int) && workers_int < 1L) {
+    if (workers_int < 1L) {
       stop("--workers must be >= 1, got: ", workers_int, call. = FALSE)
     }
     validated$workers <- workers_int
   }
+  # else: validated$workers stays NULL (from validated <- parsed)
 
   # --output-dir: optional, NULL if empty
   if (is.null(parsed$output_dir) || nchar(parsed$output_dir) == 0L) {
