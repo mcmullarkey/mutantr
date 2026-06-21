@@ -8,9 +8,18 @@
 #' If a \code{.mutantr.toml} config file exists in \code{pkg_path}, its values
 #' are merged with the explicit arguments following this priority:
 #' explicit args > config > defaults. Only keys that match function parameter
-#' names (\code{timeout}, \code{workers}, \code{output_dir}) are applied.
-#' Config keys for unimplemented features (\code{exclude}, \code{iterate},
+#' names (\code{timeout}, \code{workers}, \code{output_dir}, \code{iterate})
+#' are applied. Config keys for unimplemented features (\code{exclude},
 #' \code{in_diff}) are accepted but silently ignored.
+#'
+#' When \code{iterate = TRUE}, the function reads prior results from
+#' \code{output_dir/mutant_results.json} and skips mutants that were previously
+#' classified as \code{"caught"} or \code{"unviable"}. Only mutants that were
+#' previously \code{"missed"}, \code{"timeout"}, or are entirely new are
+#' re-tested. Skipped mutants appear in the output with their prior outcome,
+#' ensuring row completeness. This enables an iterative workflow: run mutation
+#' testing, improve test coverage for missed mutants, and re-run with
+#' \code{iterate = TRUE} to focus only on the remaining gaps.
 #'
 #' @param pkg_path Path to the root of an R package
 #' @param timeout Timeout in seconds per mutant test run (default: 30)
@@ -18,6 +27,9 @@
 #' @param output_dir Optional directory path. When provided, writes
 #'   \code{mutant_results.json} and \code{mutant_results.md} to this directory.
 #'   Default NULL (no file output).
+#' @param iterate Logical. If \code{TRUE}, skips previously caught/unviable
+#'   mutants from \code{output_dir/mutant_results.json}. Requires
+#'   \code{output_dir} to be set. Default \code{FALSE}.
 #' @return A data frame with columns: file, line, original, replacement, outcome.
 #'   The outcome column classifies each mutant as \code{"caught"} (test failure),
 #'   \code{"missed"} (no test failure), \code{"unviable"} (source/load error,
@@ -26,7 +38,8 @@
 `%||%` <- function(x, y) if (is.null(x)) y else x
 
 #' @export
-mutate_test <- function(pkg_path, timeout = NULL, workers = NULL, output_dir = NULL) {
+mutate_test <- function(pkg_path, timeout = NULL, workers = NULL, output_dir = NULL,
+                        iterate = NULL) {
   pkg_path <- normalizePath(pkg_path, mustWork = TRUE)
 
   # Read .mutantr.toml config and merge with priority: explicit args > config > defaults
@@ -36,6 +49,12 @@ mutate_test <- function(pkg_path, timeout = NULL, workers = NULL, output_dir = N
   if (is.null(timeout)) timeout <- config$timeout %||% 30
   if (is.null(workers)) workers <- config$workers %||% 1
   if (is.null(output_dir)) output_dir <- config$output_dir
+  if (is.null(iterate)) iterate <- config$iterate %||% FALSE
+
+  # Validate iterate requires output_dir
+  if (iterate && is.null(output_dir)) {
+    stop("iterate = TRUE requires output_dir to be set")
+  }
 
   # Batch-prepare all mutations in Rust (scan + apply in one call)
   prepared_json <- mutant_prepare_all(pkg_path)
@@ -53,6 +72,21 @@ mutate_test <- function(pkg_path, timeout = NULL, workers = NULL, output_dir = N
     ))
   }
 
+  # If iterate = TRUE, filter out previously caught/unviable mutants
+  skipped <- NULL
+  if (iterate) {
+    prior <- read_prior_results(output_dir)
+    if (!is.null(prior)) {
+      filtered <- filter_skipped_mutants(prepared, prior)
+      to_test <- filtered$to_test
+      skipped <- filtered$skipped
+    } else {
+      to_test <- prepared
+    }
+  } else {
+    to_test <- prepared
+  }
+
   # Run baseline test first to confirm tests pass unmutated
   baseline <- run_tests_in_copy(pkg_path, timeout = timeout)
   if (!baseline$passed) {
@@ -63,18 +97,36 @@ mutate_test <- function(pkg_path, timeout = NULL, workers = NULL, output_dir = N
   # Calculate per-mutant timeout (5x baseline, minimum of timeout arg)
   mutant_timeout <- max(timeout, baseline_time * 5)
 
-  n <- nrow(prepared)
+  n <- nrow(to_test)
 
-  if (workers <= 1) {
-    # Serial execution: single package copy, mutate-in-place, revert
-    results <- run_mutations_serial(pkg_path, prepared, mutant_timeout)
+  if (n > 0) {
+    if (workers <= 1) {
+      # Serial execution: single package copy, mutate-in-place, revert
+      results <- run_mutations_serial(pkg_path, to_test, mutant_timeout)
+    } else {
+      # Parallel execution: one copy per worker, mclapply
+      results <- run_mutations_parallel(pkg_path, to_test, mutant_timeout, workers)
+    }
+
+    out <- do.call(rbind, results)
+    rownames(out) <- NULL
   } else {
-    # Parallel execution: one copy per worker, mclapply
-    results <- run_mutations_parallel(pkg_path, prepared, mutant_timeout, workers)
+    # No mutants to test (all skipped)
+    out <- data.frame(
+      file = character(),
+      line = integer(),
+      original = character(),
+      replacement = character(),
+      outcome = character(),
+      stringsAsFactors = FALSE
+    )
   }
 
-  out <- do.call(rbind, results)
-  rownames(out) <- NULL
+  # Merge skipped mutants back into results (iterate mode)
+  if (iterate && !is.null(skipped) && nrow(skipped) > 0) {
+    out <- rbind(out, skipped)
+    rownames(out) <- NULL
+  }
 
   # Print summary
   counts <- table(out$outcome)
@@ -91,6 +143,110 @@ mutate_test <- function(pkg_path, timeout = NULL, workers = NULL, output_dir = N
   }
 
   out
+}
+
+#' Read prior mutation results from output_dir
+#'
+#' Reads \code{mutant_results.json} from \code{output_dir} and returns a
+#' data.frame with columns (file, line, original, replacement, outcome).
+#' Returns \code{NULL} if the file doesn't exist, is malformed, or has
+#' zero rows — in all cases the caller should proceed with all mutants.
+#'
+#' @param output_dir Directory containing \code{mutant_results.json}
+#' @return A data.frame or NULL
+#' @noRd
+read_prior_results <- function(output_dir) {
+  json_path <- file.path(output_dir, "mutant_results.json")
+
+  if (!file.exists(json_path)) {
+    warning("No prior results found in ", output_dir, "; running all mutants")
+    return(NULL)
+  }
+
+  data <- tryCatch(
+    jsonlite::fromJSON(json_path),
+    error = function(e) {
+      warning("Could not read prior results; running all mutants")
+      NULL
+    }
+  )
+
+  if (is.null(data) || is.null(data$results)) {
+    warning("Could not read prior results; running all mutants")
+    return(NULL)
+  }
+
+  results <- data$results
+
+  # Handle empty results (no rows) — fromJSON may return a named empty list
+  # when the JSON has {"results": {}} so we check both cases
+  if (!is.data.frame(results) || nrow(results) == 0) {
+    warning("Could not read prior results; running all mutants")
+    return(NULL)
+  }
+
+  # Verify required columns exist
+  required_cols <- c("file", "line", "original", "replacement", "outcome")
+  if (!all(required_cols %in% names(results))) {
+    warning("Could not read prior results; running all mutants")
+    return(NULL)
+  }
+
+  results
+}
+
+#' Filter prepared mutants against prior results
+#'
+#' Pure function. Partitions the \code{prepared} data.frame into mutants
+#' that need testing (\code{to_test}) and mutants that can be skipped
+#' (\code{skipped}) because they were previously caught or unviable.
+#' Match key is the 4-tuple (file, line, original, replacement).
+#'
+#' \code{to_test} includes:
+#' \itemize{
+#'   \item New mutants (not found in prior)
+#'   \item Previously missed or timed-out mutants (need re-testing)
+#' }
+#'
+#' \code{skipped} includes prior results rows for mutants that were
+#' previously caught or unviable and still exist in prepared.
+#'
+#' @param prepared Data.frame from prepare step with columns
+#'   file, line, original, replacement, mutated_content
+#' @param prior Data.frame from prior results with columns
+#'   file, line, original, replacement, outcome
+#' @return A list with \code{to_test} and \code{skipped} data.frames
+#' @noRd
+filter_skipped_mutants <- function(prepared, prior) {
+  # Coerce line to integer on both sides for reliable matching
+  prepared$line <- as.integer(prepared$line)
+  prior$line <- as.integer(prior$line)
+
+  # Create composite match keys
+  prepared_key <- paste(prepared$file, prepared$line,
+                        prepared$original, prepared$replacement, sep = "|||")
+  prior_key <- paste(prior$file, prior$line,
+                     prior$original, prior$replacement, sep = "|||")
+
+  # Build lookup from key to prior outcome
+  prior_outcome <- stats::setNames(prior$outcome, prior_key)
+
+  # Match each prepared row to its prior outcome (NA if no match)
+  matched_outcome <- prior_outcome[prepared_key]
+
+  # Determine which prepared rows are skipped (caught or unviable in prior)
+  skip_mask <- matched_outcome %in% c("caught", "unviable") & !is.na(matched_outcome)
+
+  # to_test: prepared rows not in skipped set
+  to_test <- prepared[!skip_mask, , drop = FALSE]
+  rownames(to_test) <- NULL
+
+  # skipped: prior rows matching the skipped prepared mutants
+  skipped_keys <- prepared_key[skip_mask]
+  skipped <- prior[prior_key %in% skipped_keys, , drop = FALSE]
+  rownames(skipped) <- NULL
+
+  list(to_test = to_test, skipped = skipped)
 }
 
 #' Write JSON mutation report
