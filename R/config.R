@@ -91,6 +91,12 @@ read_config <- function(pkg_path) {
         call. = FALSE
       )
     }
+    # Scalar length validation: reject TOML arrays for scalar keys
+    scalar_keys <- c("timeout", "workers", "output_dir", "iterate", "in_diff")
+    if (key %in% scalar_keys && length(raw[[key]]) != 1) {
+      stop("In ", basename(config_path), ": '", key,
+           "' must be a scalar, got length ", length(raw[[key]]), call. = FALSE)
+    }
   }
 
   raw

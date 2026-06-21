@@ -22,22 +22,20 @@
 #'   The outcome column classifies each mutant as \code{"caught"} (test failure),
 #'   \code{"missed"} (no test failure), \code{"unviable"} (source/load error,
 #'   including missing files or bad R syntax), or \code{"timeout"}.
+# Defensive null-coalesce (avoids rlang dependency)
+`%||%` <- function(x, y) if (is.null(x)) y else x
+
 #' @export
-mutate_test <- function(pkg_path, timeout = 30, workers = 1, output_dir = NULL) {
+mutate_test <- function(pkg_path, timeout = NULL, workers = NULL, output_dir = NULL) {
   pkg_path <- normalizePath(pkg_path, mustWork = TRUE)
 
   # Read .mutantr.toml config and merge with priority: explicit args > config > defaults
   config <- read_config(pkg_path)
 
-  if (missing(timeout) && !is.null(config$timeout)) {
-    timeout <- config$timeout
-  }
-  if (missing(workers) && !is.null(config$workers)) {
-    workers <- config$workers
-  }
-  if (missing(output_dir) && !is.null(config$output_dir)) {
-    output_dir <- config$output_dir
-  }
+  # Merge: explicit args (non-NULL) > config > defaults
+  if (is.null(timeout)) timeout <- config$timeout %||% 30
+  if (is.null(workers)) workers <- config$workers %||% 1
+  if (is.null(output_dir)) output_dir <- config$output_dir
 
   # Batch-prepare all mutations in Rust (scan + apply in one call)
   prepared_json <- mutant_prepare_all(pkg_path)

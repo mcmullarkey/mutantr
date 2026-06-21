@@ -136,6 +136,22 @@ test_that("read_config errors on type-mismatched output_dir", {
   )
 })
 
+test_that("read_config errors on scalar key with multi-element array", {
+  tmp <- tempfile("cfg_scalar_array_")
+  dir.create(tmp)
+  on.exit(unlink(tmp, recursive = TRUE), add = TRUE)
+
+  # timeout as multi-element array instead of scalar
+  writeLines(c(
+    'timeout = [60, 30]'
+  ), file.path(tmp, ".mutantr.toml"))
+
+  expect_error(
+    mutantr:::read_config(tmp),
+    "timeout.*must be a scalar"
+  )
+})
+
 # ---- mutate_test integration tests with config ----
 
 test_that("mutate_test uses config values when no explicit args", {
@@ -314,4 +330,96 @@ test_that("mutate_test with config workers works same as serial", {
   expect_equal(serial_sorted$outcome, config_sorted$outcome)
 
   unlink(pkg_dir, recursive = TRUE)
+})
+
+test_that("validate_args leaves timeout/workers/output_dir NULL when not supplied", {
+  # Simulate parse_args output when no --timeout, --workers, --output-dir flags
+  parsed <- list(
+    pkg = tempdir(),          # exists
+    timeout = NULL,
+    workers = NULL,
+    output_dir = NULL,
+    iterate = FALSE,
+    in_diff = FALSE,
+    help = FALSE,
+    version = FALSE
+  )
+
+  validated <- mutantr:::validate_args(parsed)
+
+  expect_null(validated$timeout, "timeout should be NULL when not supplied")
+  expect_null(validated$workers, "workers should be NULL when not supplied")
+  expect_null(validated$output_dir, "output_dir should be NULL when not supplied")
+})
+
+test_that("CLI + config: NULL args from CLI let config apply through mutate_test", {
+  skip_if_not_installed("mutantr")
+
+  # Create a minimal package with passing tests
+  pkg_dir <- tempfile("cli_cfg_testpkg")
+  dir.create(pkg_dir)
+  dir.create(file.path(pkg_dir, "R"))
+  dir.create(file.path(pkg_dir, "tests", "testthat"), recursive = TRUE)
+  on.exit(unlink(pkg_dir, recursive = TRUE), add = TRUE)
+
+  writeLines(c(
+    "Package: clicfgtest",
+    "Title: CLI Config Test",
+    "Version: 0.0.1",
+    "Description: A test package for CLI+config integration.",
+    "License: MIT",
+    "Encoding: UTF-8"
+  ), file.path(pkg_dir, "DESCRIPTION"))
+
+  writeLines(
+    'exportPattern("^[[:alpha:]]+")',
+    file.path(pkg_dir, "NAMESPACE")
+  )
+
+  writeLines(c(
+    "is_positive <- function(x) {",
+    "  if (x > 0) {",
+    "    return(TRUE)",
+    "  }",
+    "  FALSE",
+    "}"
+  ), file.path(pkg_dir, "R", "math.R"))
+
+  writeLines(c(
+    'test_that("is_positive works", {',
+    '  expect_true(is_positive(1))',
+    '  expect_false(is_positive(-1))',
+    '  expect_false(is_positive(0))',
+    '})'
+  ), file.path(pkg_dir, "tests", "testthat", "test-math.R"))
+
+  writeLines(c(
+    'library(testthat)',
+    'library(clicfgtest)',
+    'test_check("clicfgtest")'
+  ), file.path(pkg_dir, "tests", "testthat.R"))
+
+  # Set output_dir in config
+  cfg_dir <- tempfile("cli_cfg_output")
+  on.exit(unlink(cfg_dir, recursive = TRUE), add = TRUE)
+
+  writeLines(sprintf('output_dir = "%s"', cfg_dir),
+             file.path(pkg_dir, ".mutantr.toml"))
+
+  # Simulate the CLI pipeline: parse_args → validate_args → mutate_test
+  # This is exactly what cli_main does, minus the quit() call.
+  parsed <- mutantr:::parse_args(c("--pkg", pkg_dir))
+  validated <- mutantr:::validate_args(parsed)
+
+  # Pass the (potentially NULL) validated args through to mutate_test
+  results <- mutantr::mutate_test(
+    pkg_path = validated$pkg,
+    timeout = validated$timeout,
+    workers = validated$workers,
+    output_dir = validated$output_dir
+  )
+
+  # Files should exist in the config-specified directory
+  expect_true(file.exists(file.path(cfg_dir, "mutant_results.json")))
+  expect_true(file.exists(file.path(cfg_dir, "mutant_results.md")))
 })
