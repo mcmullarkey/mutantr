@@ -42,11 +42,11 @@ parse_args <- function(args) {
     "--version" = "version"
   )
 
-  boolean_flags <- c("--iterate", "--in-diff", "--help", "--version")
+  boolean_flags <- c("--iterate", "--help", "--version")
 
   result <- list(
     pkg = NULL, timeout = NULL, workers = NULL, output_dir = NULL,
-    iterate = FALSE, in_diff = FALSE, help = FALSE, version = FALSE
+    iterate = FALSE, in_diff = NULL, help = FALSE, version = FALSE
   )
 
   i <- 1L
@@ -159,6 +159,11 @@ validate_args <- function(parsed) {
     validated$iterate <- NULL
   }
 
+  # --in-diff: optional path; NULL if empty
+  if (is.null(parsed$in_diff) || nchar(parsed$in_diff) == 0L) {
+    validated$in_diff <- NULL
+  }
+
   validated
 }
 
@@ -205,7 +210,7 @@ print_usage <- function() {
   cat("  --iterate             Iterative mode: skip previously caught/unviable\n")
   cat("                         mutants and focus on prior misses (requires\n")
   cat("                         --output-dir)\n")
-  cat("  --in-diff             (Not yet supported) Only test mutants in git diff\n")
+  cat("  --in-diff <path>      Only test mutants on lines changed in the diff file\n")
   cat("  --help                Print this usage message and exit\n")
   cat("  --version             Print package version and exit\n")
 }
@@ -245,11 +250,6 @@ cli_main <- function(args) {
     quit(status = 0L)
   }
 
-  # Forward-compatible flags: warn but don't forward yet
-  if (isTRUE(parsed$in_diff)) {
-    message("Warning: --in-diff is not yet supported; ignored.")
-  }
-
   # Validate
   validated <- tryCatch(
     validate_args(parsed),
@@ -267,7 +267,8 @@ cli_main <- function(args) {
       timeout = validated$timeout,
       workers = validated$workers,
       output_dir = validated$output_dir,
-      iterate = validated$iterate
+      iterate = validated$iterate,
+      in_diff = validated$in_diff
     ),
     error = function(e) {
       error <<- e
