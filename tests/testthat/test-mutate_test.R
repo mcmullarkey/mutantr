@@ -295,3 +295,74 @@ test_that("unviable_source_error: source/load errors classified as unviable not 
   unlink(pkg_dir, recursive = TRUE)
   unlink(out_dir, recursive = TRUE)
 })
+
+test_that("render_outcome_section produces byte-identical markdown", {
+  df <- data.frame(
+    file = c("a.R", "a.R", "b.R"),
+    line = c(10L, 20L, 5L),
+    original = c(">", "TRUE", "+"),
+    replacement = c("<=", "FALSE", "-"),
+    stringsAsFactors = FALSE
+  )
+  result <- mutantr:::render_outcome_section(df, "## Missed Mutants",
+                                   c("Intro line 1.", "Intro line 2."))
+  expected <- c(
+    "## Missed Mutants", "",
+    "Intro line 1.", "Intro line 2.", "",
+    "### `a.R`", "",
+    "| Line | Original | Mutated To |",
+    "|------|----------|------------|",
+    "| 10 | `>` | `<=` |",
+    "| 20 | `TRUE` | `FALSE` |", "",
+    "### `b.R`", "",
+    "| Line | Original | Mutated To |",
+    "|------|----------|------------|",
+    "| 5 | `+` | `-` |", ""
+  )
+  expect_equal(as.character(result), expected)
+})
+
+test_that("write_md_report renders both sections via shared helper", {
+  results_df <- data.frame(
+    file = c("guard.R", "guard.R", "math.R"),
+    line = c(2L, 4L, 10L),
+    original = c("!=", ">", ">"),
+    replacement = c("==", "<=", "<="),
+    outcome = c("unviable", "unviable", "missed"),
+    stringsAsFactors = FALSE
+  )
+  tmp <- tempfile("mdtest_")
+  dir.create(tmp)
+  on.exit(unlink(tmp, recursive = TRUE), add = TRUE)
+  mutantr:::write_md_report(results_df, tmp)
+  md <- paste(readLines(file.path(tmp, "mutant_results.md")), collapse = "\n")
+
+  # (a) Section ordering: Unviable before Missed
+  uv_pos <- regexpr("## Unviable Mutants", md, fixed = TRUE)[1]
+  ms_pos <- regexpr("## Missed Mutants", md, fixed = TRUE)[1]
+  expect_true(uv_pos > 0 && ms_pos > uv_pos,
+    info = "Unviable section must appear before Missed section")
+
+  # (b) Distinct intro text per section
+  expect_true(grepl("package loading", md, fixed = TRUE),
+    info = "Unviable intro must mention package loading")
+  expect_true(grepl("not detected by the test suite", md, fixed = TRUE),
+    info = "Missed intro must mention not detected by test suite")
+
+  # (c) Per-file grouping
+  expect_true(grepl("### `guard.R`", md, fixed = TRUE),
+    info = "guard.R must appear as a per-file heading")
+  expect_true(grepl("### `math.R`", md, fixed = TRUE),
+    info = "math.R must appear as a per-file heading")
+
+  # (d) Exact table rows
+  expect_true(grepl("| 2 | `!=` | `==` |", md, fixed = TRUE),
+    info = "Unviable mutant row must match exact format")
+  expect_true(grepl("| 10 | `>` | `<=` |", md, fixed = TRUE),
+    info = "Missed mutant row must match exact format")
+
+  # (e) Table header appears exactly twice (once per file; one file per section in this fixture)
+  hdr_matches <- gregexpr("| Line | Original | Mutated To |", md, fixed = TRUE)[[1]]
+  expect_equal(length(hdr_matches), 2L,
+    info = "Table header must appear exactly twice (once per file; one file per section in this fixture)")
+})
