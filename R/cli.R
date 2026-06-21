@@ -8,7 +8,6 @@
 #   - Parse command-line arguments (--flag=value and --flag value)
 #   - Validate parsed arguments (dir.exists, numeric coercion)
 #   - Compute CI exit codes (0=all caught, 1=missed, 2=error)
-#   - Locate Rscript binary
 #   - Orchestrate the CLI lifecycle
 #
 # What it does NOT do:
@@ -85,6 +84,9 @@ parse_args <- function(args) {
       if (i + 1L > length(args)) {
         stop("Flag ", flag, " requires a value", call. = FALSE)
       }
+      if (grepl("^--", args[i + 1L])) {
+        stop("Flag ", flag, " requires a value", call. = FALSE)
+      }
       result[[name]] <- args[i + 1L]
       i <- i + 2L
     }
@@ -128,6 +130,9 @@ validate_args <- function(parsed) {
     if (is.na(timeout_num)) {
       stop("--timeout must be numeric, got: ", parsed$timeout, call. = FALSE)
     }
+    if (!is.na(timeout_num) && timeout_num <= 0) {
+      stop("--timeout must be positive, got: ", timeout_num, call. = FALSE)
+    }
     validated$timeout <- timeout_num
   }
 
@@ -138,6 +143,9 @@ validate_args <- function(parsed) {
     workers_int <- suppressWarnings(as.integer(parsed$workers))
     if (is.na(workers_int)) {
       stop("--workers must be an integer, got: ", parsed$workers, call. = FALSE)
+    }
+    if (!is.na(workers_int) && workers_int < 1L) {
+      stop("--workers must be >= 1, got: ", workers_int, call. = FALSE)
     }
     validated$workers <- workers_int
   }
@@ -168,35 +176,13 @@ compute_exit_code <- function(results, error) {
   if (!is.null(error)) {
     return(2L)
   }
+  if (is.null(results) || !"outcome" %in% names(results)) {
+    stop("Internal error: results lacks 'outcome' column", call. = FALSE)
+  }
   if (sum(results$outcome == "missed") > 0L) {
     return(1L)
   }
   0L
-}
-
-
-#' Find Rscript executable
-#'
-#' Tries \code{Sys.which("Rscript")} first, then falls back to
-#' \code{file.path(R.home("bin"), "Rscript")}. Stops with a diagnostic
-#' message if neither resolves.
-#'
-#' @return Character string: path to Rscript
-#' @noRd
-find_rscript <- function() {
-  rscript <- Sys.which("Rscript")
-  if (nzchar(rscript)) {
-    return(unname(rscript))
-  }
-  rscript <- file.path(R.home("bin"), "Rscript")
-  if (file.exists(rscript)) {
-    return(rscript)
-  }
-  stop(
-    "Could not find Rscript. Tried Sys.which('Rscript') and ",
-    "file.path(R.home('bin'), 'Rscript').",
-    call. = FALSE
-  )
 }
 
 

@@ -181,6 +181,71 @@ test_that("(d) exit 2 runtime: failing baseline tests yields status 2 NOT 1", {
   expect_equal(status, 2, info = sprintf("Expected exit 2, got %d. Inversion guard failed.", status))
 })
 
+test_that("(f) greedy parse: --pkg --timeout 30 errors with 'requires a value'", {
+  skip_if_not_installed("mutantr")
+  cli_path <- system.file("bin", "mutantr", package = "mutantr")
+  expect_true(cli_path != "", "CLI script not found — install package first")
+
+  result <- system2("Rscript",
+                    c(shQuote(cli_path), "--pkg", "--timeout", "30"),
+                    stdout = TRUE, stderr = TRUE, wait = TRUE)
+
+  expect_equal(attr(result, "status") %||% 0, 2)
+  stdout_combined <- paste(result, collapse = "\n")
+  expect_true(grepl("--pkg requires a value", stdout_combined),
+              info = "Should mention '--pkg requires a value'")
+})
+
+test_that("(g) exit 2: --timeout 0 is rejected", {
+  skip_if_not_installed("mutantr")
+  cli_path <- system.file("bin", "mutantr", package = "mutantr")
+  expect_true(cli_path != "", "CLI script not found — install package first")
+
+  pkg_dir <- make_inline_pkg(with_tests = TRUE)
+  on.exit(unlink(pkg_dir, recursive = TRUE), add = TRUE)
+
+  result <- system2("Rscript",
+                    c(shQuote(cli_path), "--pkg", shQuote(pkg_dir),
+                      "--timeout", "0"),
+                    stdout = TRUE, stderr = TRUE, wait = TRUE)
+
+  expect_equal(attr(result, "status") %||% 0, 2)
+})
+
+test_that("(h) exit 2: --workers -1 is rejected", {
+  skip_if_not_installed("mutantr")
+  cli_path <- system.file("bin", "mutantr", package = "mutantr")
+  expect_true(cli_path != "", "CLI script not found — install package first")
+
+  pkg_dir <- make_inline_pkg(with_tests = TRUE)
+  on.exit(unlink(pkg_dir, recursive = TRUE), add = TRUE)
+
+  result <- system2("Rscript",
+                    c(shQuote(cli_path), "--pkg", shQuote(pkg_dir),
+                      "--workers", "-1"),
+                    stdout = TRUE, stderr = TRUE, wait = TRUE)
+
+  expect_equal(attr(result, "status") %||% 0, 2)
+})
+
+test_that("(i) malformed results (missing outcome column) produce exit 2", {
+  skip_if_not_installed("mutantr")
+  library(mutantr)
+
+  # compute_exit_code with data frame missing 'outcome' should stop
+  bad_results <- data.frame(mutant_id = 1L)
+  expect_error(
+    mutantr:::compute_exit_code(bad_results, NULL),
+    "Internal error: results lacks 'outcome' column"
+  )
+
+  # NULL results should also trigger the guard
+  expect_error(
+    mutantr:::compute_exit_code(NULL, NULL),
+    "Internal error: results lacks 'outcome' column"
+  )
+})
+
 test_that("(e) --pkg=value form works identically", {
   skip_if_not_installed("mutantr")
   cli_path <- system.file("bin", "mutantr", package = "mutantr")
