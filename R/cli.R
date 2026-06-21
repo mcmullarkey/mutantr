@@ -153,6 +153,12 @@ validate_args <- function(parsed) {
     validated$output_dir <- NULL
   }
 
+  # --iterate: boolean flag; only pass through TRUE, otherwise NULL
+  # to let mutate_test() merge config/defaults
+  if (!isTRUE(parsed$iterate)) {
+    validated$iterate <- NULL
+  }
+
   validated
 }
 
@@ -196,7 +202,9 @@ print_usage <- function() {
   cat("  --timeout <secs>      Timeout per mutant test run (default: 30)\n")
   cat("  --workers <n>         Number of parallel workers (default: 1)\n")
   cat("  --output-dir <path>   Write JSON and Markdown reports to this directory\n")
-  cat("  --iterate             (Not yet supported) Iteratively improve tests\n")
+  cat("  --iterate             Iterative mode: skip previously caught/unviable\n")
+  cat("                         mutants and focus on prior misses (requires\n")
+  cat("                         --output-dir)\n")
   cat("  --in-diff             (Not yet supported) Only test mutants in git diff\n")
   cat("  --help                Print this usage message and exit\n")
   cat("  --version             Print package version and exit\n")
@@ -238,9 +246,6 @@ cli_main <- function(args) {
   }
 
   # Forward-compatible flags: warn but don't forward yet
-  if (isTRUE(parsed$iterate)) {
-    message("Warning: --iterate is not yet supported; ignored.")
-  }
   if (isTRUE(parsed$in_diff)) {
     message("Warning: --in-diff is not yet supported; ignored.")
   }
@@ -261,7 +266,8 @@ cli_main <- function(args) {
       pkg_path = validated$pkg,
       timeout = validated$timeout,
       workers = validated$workers,
-      output_dir = validated$output_dir
+      output_dir = validated$output_dir,
+      iterate = validated$iterate
     ),
     error = function(e) {
       error <<- e
