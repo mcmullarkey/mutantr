@@ -178,3 +178,120 @@ test_that("mutate_test writes JSON and markdown reports when output_dir is set",
   unlink(pkg_dir, recursive = TRUE)
   unlink(out_dir, recursive = TRUE)
 })
+
+test_that("unviable_source_error: source/load errors classified as unviable not caught", {
+  # Create a package with two files:
+  #   guard.R — has a stopifnot guard on the function result (source-time check)
+  #   mult.R  — has a stopifnot guard on the function result (source-time check)
+  # When mutations change the comparison in stopifnot(), source() fails.
+  # Previously these were mis-classified as "caught", inflating the score.
+  pkg_dir <- tempfile("testpkg")
+  dir.create(pkg_dir)
+  dir.create(file.path(pkg_dir, "R"))
+  dir.create(file.path(pkg_dir, "tests", "testthat"), recursive = TRUE)
+
+  writeLines(c(
+    "Package: testpkg", "Title: Test Package", "Version: 0.0.1",
+    "Description: A test package.", "License: MIT", "Encoding: UTF-8"
+  ), file.path(pkg_dir, "DESCRIPTION"))
+
+  writeLines('exportPattern("^[[:alpha:]]+")', file.path(pkg_dir, "NAMESPACE"))
+
+  # guard.R: + (Arithmetic) and != (Comparison)
+  #   != mutation → stopifnot(FALSE) → source error → unviable
+  #   +  mutation → function body change → tests fail → caught
+  writeLines(c(
+    "add <- function(x, y) { x + y }",
+    "stopifnot(add(1, 2) != 4)"
+  ), file.path(pkg_dir, "R", "guard.R"))
+
+  # mult.R: * (Arithmetic) and > (Comparison)
+  #   > mutation → stopifnot(FALSE) → source error → unviable
+  #   * mutation → function body change → tests fail → caught
+  writeLines(c(
+    "mult <- function(x, y) { x * y }",
+    "stopifnot(mult(2, 3) > 0)"
+  ), file.path(pkg_dir, "R", "mult.R"))
+
+  # Tests that catch function body mutations but not guard mutations
+  writeLines(c(
+    'test_that("add works", {',
+    '  expect_equal(add(1, 2), 3)',
+    '  expect_equal(add(0, 0), 0)',
+    '})',
+    '',
+    'test_that("mult works", {',
+    '  expect_equal(mult(2, 3), 6)',
+    '  expect_equal(mult(0, 5), 0)',
+    '})'
+  ), file.path(pkg_dir, "tests", "testthat", "test-math.R"))
+
+  writeLines(c(
+    'library(testthat)',
+    'library(testpkg)',
+    'test_check("testpkg")'
+  ), file.path(pkg_dir, "tests", "testthat.R"))
+
+  # Capture output to verify "unviable" appears in console
+  # cli writes to stderr (message), so we capture both output and message
+  output <- capture.output({
+    results <- mutate_test(pkg_dir)
+  }, type = "message")
+
+  # (a) ≥1 row with outcome "unviable" AND ≥1 row with outcome "caught"
+  expect_true(sum(results$outcome == "unviable") > 0,
+              info = "Should have at least one unviable mutant")
+  expect_true(sum(results$outcome == "caught") > 0,
+              info = "Should have at least one caught mutant")
+
+  # (b) unviable rows correspond to guard-expression sites (line 2 in each file),
+  #     caught rows correspond to function-body sites (line 1)
+  unviable <- results[results$outcome == "unviable", ]
+  caught <- results[results$outcome == "caught", ]
+  expect_true(all(unviable$line == 2),
+              info = "Unviable mutants should be on guard/stopifnot lines (line 2)")
+  expect_true(all(caught$line == 1),
+              info = "Caught mutants should be on function-body lines (line 1)")
+
+  # Now test with output_dir for JSON and MD report assertions
+  out_dir <- tempfile("report_output")
+  dir.create(out_dir)
+  output2 <- capture.output({
+    results2 <- mutate_test(pkg_dir, output_dir = out_dir)
+  }, type = "message")
+
+  json_path <- file.path(out_dir, "mutant_results.json")
+  md_path <- file.path(out_dir, "mutant_results.md")
+
+  json_data <- jsonlite::fromJSON(json_path)
+
+  # (c) json_data$summary$unviable > 0
+  expect_true(json_data$summary$unviable > 0,
+              info = "JSON summary should have unviable > 0")
+
+  # (d) MD report contains "## Unviable Mutants" detail section
+  md_text <- paste(readLines(md_path), collapse = "\n")
+  expect_true(grepl("## Unviable Mutants", md_text),
+              info = "MD report should contain ## Unviable Mutants section")
+
+  # (e) capture.output() includes "unviable"
+  expect_true(any(grepl("unviable", output)),
+              info = "Console output should contain 'unviable'")
+  expect_true(any(grepl("unviable", output2)),
+              info = "Console output (with output_dir) should contain 'unviable'")
+
+  # (f) json_data$summary$mutation_score == 100 when missed == 0
+  expect_equal(json_data$summary$missed, 0,
+               info = "Should have 0 missed mutants")
+  expect_equal(json_data$summary$mutation_score, 100,
+               info = "Mutation score should be 100% when no mutants are missed")
+
+  # (g) Unviable Mutants section lists mutants grouped by file
+  expect_true(grepl("### `guard.R`", md_text),
+              info = "MD report should list guard.R under Unviable Mutants")
+  expect_true(grepl("### `mult.R`", md_text),
+              info = "MD report should list mult.R under Unviable Mutants")
+
+  unlink(pkg_dir, recursive = TRUE)
+  unlink(out_dir, recursive = TRUE)
+})
