@@ -235,13 +235,13 @@ test_that("(i) malformed results (missing outcome column) produce exit 2", {
   # compute_exit_code with data frame missing 'outcome' should stop
   bad_results <- data.frame(mutant_id = 1L)
   expect_error(
-    mutantr:::compute_exit_code(bad_results, NULL),
+    mutantr:::compute_exit_code(bad_results),
     "Internal error: results lacks 'outcome' column"
   )
 
   # NULL results should also trigger the guard
   expect_error(
-    mutantr:::compute_exit_code(NULL, NULL),
+    mutantr:::compute_exit_code(NULL),
     "Internal error: results lacks 'outcome' column"
   )
 })

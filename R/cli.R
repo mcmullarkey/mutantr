@@ -163,19 +163,18 @@ validate_args <- function(parsed) {
 #'
 #' Pure function. Maps mutation test results to an exit code:
 #' \itemize{
-#'   \item 2 — if \code{error} is not NULL (runtime or pre-flight error)
 #'   \item 1 — if any mutant has outcome "missed"
 #'   \item 0 — all mutants caught (or no mutants found)
 #' }
 #'
+#' Errors (NULL results or missing outcome column) raise an error rather than
+#' returning 2 — the caller (\code{cli_main}) wraps this in \code{tryCatch} to
+#' produce exit code 2, maintaining the inversion guard.
+#'
 #' @param results Data frame returned by \code{mutate_test()}
-#' @param error Error object, or NULL if no error occurred
-#' @return Integer 0, 1, or 2
+#' @return Integer 0 or 1
 #' @noRd
-compute_exit_code <- function(results, error) {
-  if (!is.null(error)) {
-    return(2L)
-  }
+compute_exit_code <- function(results) {
   if (is.null(results) || !"outcome" %in% names(results)) {
     stop("Internal error: results lacks 'outcome' column", call. = FALSE)
   }
@@ -278,6 +277,15 @@ cli_main <- function(args) {
   }
 
   # Compute and return exit code
-  exit_code <- compute_exit_code(results, NULL)
+  # Wrapped in tryCatch so that stop() inside compute_exit_code (NULL results
+  # or missing outcome column) produces exit 2, NOT exit 1 — the inversion
+  # guard ensures errors are never conflated with "missed > 0".
+  exit_code <- tryCatch(
+    compute_exit_code(results),
+    error = function(e) {
+      message(e$message)
+      2L
+    }
+  )
   quit(status = exit_code)
 }
