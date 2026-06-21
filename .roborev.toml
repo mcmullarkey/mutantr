@@ -1,0 +1,16 @@
+review_agent = 'opencode'
+review_guidelines = """
+Audit the diff for real bugs AND design-principle drift across the five principles below.
+Cite design findings by rubric signal (§N.M). Rubric: .opencode/references/design-principles-rubric.md
+
+§1 Encode invariants in types: 1.1 Required fields non-Optional, 1.2 Sum types for state machines,
+  1.3 Boundary validation, 1.4 Distinct types for domain values, 1.5 Tight test predicates
+§2 Separate pure from effectful: 2.1 Effect-naming verbs, 2.2 Values not connections,
+  2.3 Pure tests need no fixtures, 2.4 Orchestrator shorter than core
+§3 Cut at the joints: 3.1 Single-direction imports, 3.2 Representation independence,
+  3.3 Single-responsibility helpers, 3.4 Protocol over concrete, 3.5 Complete callback coverage
+§4 Document module responsibility: 4.1 Three-question docstring, 4.2 Descriptive name,
+  4.3 ≤5 public names
+§5 Function-level discipline: 5.1 Single responsibility, 5.2 Concise by default,
+  5.3 Testable without 6 patches
+"""

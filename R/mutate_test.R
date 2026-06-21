@@ -11,7 +11,10 @@
 #' @param output_dir Optional directory path. When provided, writes
 #'   \code{mutant_results.json} and \code{mutant_results.md} to this directory.
 #'   Default NULL (no file output).
-#' @return A data frame with columns: file, line, original, replacement, outcome
+#' @return A data frame with columns: file, line, original, replacement, outcome.
+#'   The outcome column classifies each mutant as \code{"caught"} (test failure),
+#'   \code{"missed"} (no test failure), \code{"unviable"} (source/load error,
+#'   including missing files or bad R syntax), or \code{"timeout"}.
 #' @export
 mutate_test <- function(pkg_path, timeout = 30, workers = 1, output_dir = NULL) {
   pkg_path <- normalizePath(pkg_path, mustWork = TRUE)
@@ -127,6 +130,30 @@ write_md_report <- function(results_df, output_dir) {
     sprintf("| **Mutation score** | **%s** |",
             if (is.na(score)) "N/A" else paste0(score, "%"))
   )
+
+  if (unviable > 0) {
+    unviable_df <- results_df[results_df$outcome == "unviable", ]
+    lines <- c(lines, "",
+      "## Unviable Mutants", "",
+      "These mutations caused errors during package loading (source/load",
+      "failure) and could not be tested. Common causes include modified",
+      "guard expressions, broken R syntax, or missing files.", ""
+    )
+
+    for (f in unique(unviable_df$file)) {
+      file_rows <- unviable_df[unviable_df$file == f, ]
+      lines <- c(lines,
+        sprintf("### `%s`", f), "",
+        "| Line | Original | Mutated To |",
+        "|------|----------|------------|"
+      )
+      for (i in seq_len(nrow(file_rows))) {
+        r <- file_rows[i, ]
+        lines <- c(lines, sprintf("| %d | `%s` | `%s` |", r$line, r$original, r$replacement))
+      }
+      lines <- c(lines, "")
+    }
+  }
 
   if (missed > 0) {
     missed_df <- results_df[results_df$outcome == "missed", ]
@@ -253,6 +280,8 @@ test_mutation_in_place <- function(pkg_copy, mutation, timeout) {
 
   outcome <- if (test_result$timeout) {
     "timeout"
+  } else if (isTRUE(test_result$source_error)) {
+    "unviable"
   } else if (isTRUE(test_result$error)) {
     "caught"
   } else if (!test_result$passed) {
@@ -276,30 +305,38 @@ run_tests_in_copy <- function(pkg_path, timeout = 30) {
   result <- tryCatch({
     out <- callr::r(
       function(path) {
+        # Source phase: load all R files into a clean environment
+        source_error <- FALSE
         env <- new.env(parent = globalenv())
         tryCatch({
           r_dir <- file.path(path, "R")
           for (f in list.files(r_dir, pattern = "\\.R$", full.names = TRUE)) {
             source(f, local = env)
           }
-
-          test_dir <- file.path(path, "tests", "testthat")
-          if (!dir.exists(test_dir)) {
-            return(list(passed = TRUE, n_failed = 0L))
-          }
-
-          results <- testthat::test_dir(
-            test_dir,
-            env = env,
-            reporter = testthat::SilentReporter$new(),
-            stop_on_failure = FALSE
-          )
-
-          n_fail <- sum(as.data.frame(results)$failed)
-          list(passed = n_fail == 0L, n_failed = n_fail)
         }, error = function(e) {
-          list(passed = FALSE, n_failed = -1L, error_msg = conditionMessage(e))
+          # Source/load error (e.g., stopifnot failure, bad syntax)
+          source_error <<- TRUE
         })
+
+        if (source_error) {
+          return(list(passed = FALSE, source_error = TRUE, n_failed = NA_integer_))
+        }
+
+        # Test phase: run testthat tests
+        test_dir <- file.path(path, "tests", "testthat")
+        if (!dir.exists(test_dir)) {
+          return(list(passed = TRUE, source_error = FALSE, n_failed = 0L))
+        }
+
+        results <- testthat::test_dir(
+          test_dir,
+          env = env,
+          reporter = testthat::SilentReporter$new(),
+          stop_on_failure = FALSE
+        )
+
+        n_fail <- sum(as.data.frame(results)$failed)
+        list(passed = n_fail == 0L, source_error = FALSE, n_failed = n_fail)
       },
       args = list(path = pkg_path),
       timeout = timeout,
@@ -307,15 +344,18 @@ run_tests_in_copy <- function(pkg_path, timeout = 30) {
     )
 
     elapsed <- as.numeric(proc.time()["elapsed"] - start)
-    list(passed = out$passed, elapsed = elapsed, timeout = FALSE, error = FALSE)
+    list(passed = out$passed, elapsed = elapsed, timeout = FALSE, error = FALSE,
+         source_error = isTRUE(out$source_error))
   },
   callr_timeout_error = function(e) {
     elapsed <- as.numeric(proc.time()["elapsed"] - start)
-    list(passed = FALSE, elapsed = elapsed, timeout = TRUE, error = FALSE)
+    list(passed = FALSE, elapsed = elapsed, timeout = TRUE, error = FALSE,
+         source_error = FALSE)
   },
   error = function(e) {
     elapsed <- as.numeric(proc.time()["elapsed"] - start)
-    list(passed = FALSE, elapsed = elapsed, timeout = FALSE, error = TRUE)
+    list(passed = FALSE, elapsed = elapsed, timeout = FALSE, error = TRUE,
+         source_error = FALSE)
   })
 
   result
