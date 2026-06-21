@@ -11,6 +11,7 @@ License: MIT + file LICENSE
 Imports:
     callr,
     cli,
+    configr,
     jsonlite
 Encoding: UTF-8
 Roxygen: list(markdown = TRUE)

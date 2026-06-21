@@ -5,6 +5,13 @@
 #' workers for speed: each worker gets one persistent copy of the package
 #' and mutates files in-place (reverting after each test).
 #'
+#' If a \code{.mutantr.toml} config file exists in \code{pkg_path}, its values
+#' are merged with the explicit arguments following this priority:
+#' explicit args > config > defaults. Only keys that match function parameter
+#' names (\code{timeout}, \code{workers}, \code{output_dir}) are applied.
+#' Config keys for unimplemented features (\code{exclude}, \code{iterate},
+#' \code{in_diff}) are accepted but silently ignored.
+#'
 #' @param pkg_path Path to the root of an R package
 #' @param timeout Timeout in seconds per mutant test run (default: 30)
 #' @param workers Number of parallel workers (default: 1)
@@ -18,6 +25,19 @@
 #' @export
 mutate_test <- function(pkg_path, timeout = 30, workers = 1, output_dir = NULL) {
   pkg_path <- normalizePath(pkg_path, mustWork = TRUE)
+
+  # Read .mutantr.toml config and merge with priority: explicit args > config > defaults
+  config <- read_config(pkg_path)
+
+  if (missing(timeout) && !is.null(config$timeout)) {
+    timeout <- config$timeout
+  }
+  if (missing(workers) && !is.null(config$workers)) {
+    workers <- config$workers
+  }
+  if (missing(output_dir) && !is.null(config$output_dir)) {
+    output_dir <- config$output_dir
+  }
 
   # Batch-prepare all mutations in Rust (scan + apply in one call)
   prepared_json <- mutant_prepare_all(pkg_path)
