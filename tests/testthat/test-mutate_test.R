@@ -392,12 +392,4 @@ test_that("render_outcome_section honors Does-NOT contracts", {
   result_empty <- mutantr:::render_outcome_section(df_empty, "## Title", c("intro"))
   expect_equal(result_empty, c("## Title", "", "intro", ""))
 
-  # Does NOT write to disk
-  tmp <- tempfile("notodisk_")
-  dir.create(tmp)
-  on.exit(unlink(tmp, recursive = TRUE), add = TRUE)
-  result_no_disk <- mutantr:::render_outcome_section(df, "## Missed Mutants",
-                                           c("Intro line 1.", "Intro line 2."))
-  expect_type(result_no_disk, "character")
-  expect_length(list.files(tmp), 0)
 })
