@@ -1,0 +1,4 @@
+#!/usr/bin/env Rscript
+# mutantr CLI wrapper — parse args, run mutation testing, exit with CI codes
+# Exit codes: 0 (all caught), 1 (missed > 0), 2 (error)
+mutantr:::cli_main(commandArgs(TRUE))
