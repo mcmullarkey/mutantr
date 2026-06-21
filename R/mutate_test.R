@@ -101,6 +101,37 @@ write_json_report <- function(results_df, output_dir) {
   jsonlite::write_json(report, file.path(output_dir, "mutant_results.json"),
                        pretty = TRUE, auto_unbox = TRUE)
 }
+#' Render a markdown detail section for one mutation outcome
+#'
+#' Called as \code{render_outcome_section(df, title, intro_lines)} from
+#' \code{write_md_report()} with a pre-filtered data frame.
+#' Does NOT filter — the caller must pass a pre-filtered data frame.
+#' Does NOT write to disk — returns a character vector.
+#' Does NOT emit a leading blank line separator (caller's responsibility).
+#' Does NOT guard for nrow(df)==0 (caller guards).
+#'
+#' @param df data.frame with columns file, line, original, replacement
+#' @param title section heading, e.g. "## Missed Mutants"
+#' @param intro_lines character vector of explanatory text (must be non-empty; caller supplies intro)
+#' @return character vector of markdown lines
+#' @noRd
+render_outcome_section <- function(df, title, intro_lines) {
+  lines <- c(title, "", intro_lines, "")
+  for (f in unique(df$file)) {
+    file_rows <- df[df$file == f, ]
+    lines <- c(lines,
+      sprintf("### `%s`", f), "",
+      "| Line | Original | Mutated To |",
+      "|------|----------|------------|"
+    )
+    for (i in seq_len(nrow(file_rows))) {
+      r <- file_rows[i, ]
+      lines <- c(lines, sprintf("| %d | `%s` | `%s` |", r$line, r$original, r$replacement))
+    }
+    lines <- c(lines, "")
+  }
+  lines
+}
 
 #' Write markdown mutation report
 #' @noRd
@@ -133,50 +164,20 @@ write_md_report <- function(results_df, output_dir) {
 
   if (unviable > 0) {
     unviable_df <- results_df[results_df$outcome == "unviable", ]
-    lines <- c(lines, "",
-      "## Unviable Mutants", "",
-      "These mutations caused errors during package loading (source/load",
-      "failure) and could not be tested. Common causes include modified",
-      "guard expressions, broken R syntax, or missing files.", ""
-    )
-
-    for (f in unique(unviable_df$file)) {
-      file_rows <- unviable_df[unviable_df$file == f, ]
-      lines <- c(lines,
-        sprintf("### `%s`", f), "",
-        "| Line | Original | Mutated To |",
-        "|------|----------|------------|"
-      )
-      for (i in seq_len(nrow(file_rows))) {
-        r <- file_rows[i, ]
-        lines <- c(lines, sprintf("| %d | `%s` | `%s` |", r$line, r$original, r$replacement))
-      }
-      lines <- c(lines, "")
-    }
+    lines <- c(lines, "", render_outcome_section(unviable_df,
+      "## Unviable Mutants",
+      c("These mutations caused errors during package loading (source/load",
+        "failure) and could not be tested. Common causes include modified",
+        "guard expressions, broken R syntax, or missing files.")))
   }
 
   if (missed > 0) {
     missed_df <- results_df[results_df$outcome == "missed", ]
-    lines <- c(lines, "",
-      "## Missed Mutants", "",
-      "These mutations were not detected by the test suite. To improve test",
-      "coverage, write tests that would fail when the original is replaced",
-      "with the mutation.", ""
-    )
-
-    for (f in unique(missed_df$file)) {
-      file_rows <- missed_df[missed_df$file == f, ]
-      lines <- c(lines,
-        sprintf("### `%s`", f), "",
-        "| Line | Original | Mutated To |",
-        "|------|----------|------------|"
-      )
-      for (i in seq_len(nrow(file_rows))) {
-        r <- file_rows[i, ]
-        lines <- c(lines, sprintf("| %d | `%s` | `%s` |", r$line, r$original, r$replacement))
-      }
-      lines <- c(lines, "")
-    }
+    lines <- c(lines, "", render_outcome_section(missed_df,
+      "## Missed Mutants",
+      c("These mutations were not detected by the test suite. To improve test",
+        "coverage, write tests that would fail when the original is replaced",
+        "with the mutation.")))
   }
 
   writeLines(lines, file.path(output_dir, "mutant_results.md"))
