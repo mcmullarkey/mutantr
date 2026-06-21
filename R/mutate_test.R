@@ -102,23 +102,8 @@ mutate_test <- function(pkg_path, timeout = NULL, workers = NULL, output_dir = N
 
   # Apply in_diff filter: restrict to_test to only lines changed in the diff
   if (!is.null(in_diff)) {
-    if (!file.exists(in_diff)) {
-      stop("in_diff file not found: ", in_diff)
-    }
     ranges <- parse_diff_ranges(in_diff)
     to_test <- filter_mutations_by_diff(to_test, ranges)
-    if (nrow(to_test) == 0) {
-      message("No mutation sites found in diff.")
-      out <- data.frame(
-        file = character(),
-        line = integer(),
-        original = character(),
-        replacement = character(),
-        outcome = character(),
-        stringsAsFactors = FALSE
-      )
-      return(out)
-    }
   }
 
   # Calculate per-mutant timeout (5x baseline, minimum of timeout arg)

@@ -82,7 +82,6 @@ parse_diff_ranges <- function(diff_path) {
       ))[[1]]
 
       if (length(hunk_match) >= 5) {
-        old_count <- if (nzchar(hunk_match[3])) as.integer(hunk_match[3]) else 1L
         new_start <- as.integer(hunk_match[4])
         new_count <- if (nzchar(hunk_match[5])) as.integer(hunk_match[5]) else 1L
 

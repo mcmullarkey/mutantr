@@ -432,3 +432,76 @@ test_that("mutate_test: in_diff = NULL produces identical results to not passing
 
   unlink(pkg_dir, recursive = TRUE)
 })
+
+# ---- Zero-match integration test ----
+
+test_that("mutate_test: zero-match with output_dir writes reports", {
+  skip_if_not_installed("mutantr")
+  library(mutantr)
+  pkg_dir <- tempfile("testpkg_zeromatch")
+  dir.create(pkg_dir)
+  dir.create(file.path(pkg_dir, "R"))
+  dir.create(file.path(pkg_dir, "tests", "testthat"), recursive = TRUE)
+
+  writeLines(c(
+    "Package: testpkgzm",
+    "Title: Test Package for zero-match",
+    "Version: 0.0.1",
+    "Description: A test package.",
+    "License: MIT",
+    "Encoding: UTF-8"
+  ), file.path(pkg_dir, "DESCRIPTION"))
+
+  writeLines('exportPattern("^[[:alpha:]]+")', file.path(pkg_dir, "NAMESPACE"))
+
+  writeLines(c(
+    "a_chk_gt <- function(x) x > 0",
+    "a_chk_eq <- function(x) x == 0",
+    "a_chk_lt <- function(x) x < 0"
+  ), file.path(pkg_dir, "R", "a.R"))
+
+  writeLines(c(
+    'test_that("all functions work", {',
+    '  expect_true(a_chk_gt(1)); expect_false(a_chk_gt(0))',
+    '  expect_true(a_chk_eq(0)); expect_false(a_chk_eq(1))',
+    '  expect_true(a_chk_lt(-1)); expect_false(a_chk_lt(0))',
+    '})'
+  ), file.path(pkg_dir, "tests", "testthat", "test-all.R"))
+
+  writeLines(c(
+    'library(testthat)',
+    'library(testpkgzm)',
+    'test_check("testpkgzm")'
+  ), file.path(pkg_dir, "tests", "testthat.R"))
+
+  out_dir <- tempfile("output_zeromatch")
+  dir.create(out_dir)
+
+  # Diff for a non-existent file — no mutations will match (zero-match)
+  diff_path <- tempfile("diff_zeromatch_")
+  writeLines(c(
+    "diff --git a/R/z.R b/R/z.R",
+    "index abc..def 100644",
+    "--- a/R/z.R",
+    "+++ b/R/z.R",
+    "@@ -1,3 +1,4 @@",
+    " line1",
+    "+new line2"
+  ), diff_path)
+
+  utils::capture.output({
+    results <- mutate_test(pkg_dir, in_diff = diff_path, output_dir = out_dir)
+  }, type = "message")
+
+  # Assert results have zero rows
+  expect_s3_class(results, "data.frame")
+  expect_equal(nrow(results), 0)
+
+  # Assert reports were written (not skipped by early-return)
+  expect_true(file.exists(file.path(out_dir, "mutant_results.json")))
+  expect_true(file.exists(file.path(out_dir, "mutant_results.md")))
+
+  unlink(pkg_dir, recursive = TRUE)
+  unlink(out_dir, recursive = TRUE)
+  unlink(diff_path)
+})
