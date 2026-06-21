@@ -1,3 +1,6 @@
+#' @noRd
+`%||%` <- function(x, y) if (is.null(x)) y else x
+
 #' Run mutation testing on an R package
 #'
 #' Scans the package's R/ directory for mutation sites, applies each mutation
@@ -8,9 +11,9 @@
 #' If a \code{.mutantr.toml} config file exists in \code{pkg_path}, its values
 #' are merged with the explicit arguments following this priority:
 #' explicit args > config > defaults. Only keys that match function parameter
-#' names (\code{timeout}, \code{workers}, \code{output_dir}, \code{iterate})
-#' are applied. Config keys for unimplemented features (\code{exclude},
-#' \code{in_diff}) are accepted but silently ignored.
+#' names (\code{timeout}, \code{workers}, \code{output_dir}, \code{iterate},
+#' \code{in_diff}) are applied. Config keys for unimplemented features
+#' (\code{exclude}) are accepted but silently ignored.
 #'
 #' When \code{iterate = TRUE}, the function reads prior results from
 #' \code{output_dir/mutant_results.json} and skips mutants that were previously
@@ -30,16 +33,18 @@
 #' @param iterate Logical. If \code{TRUE}, skips previously caught/unviable
 #'   mutants from \code{output_dir/mutant_results.json}. Requires
 #'   \code{output_dir} to be set. Default \code{FALSE}.
+#' @param in_diff Optional path to a unified diff file. When provided, only
+#'   mutations on lines changed in the diff are tested. The diff file is parsed
+#'   after the baseline test (baseline always runs regardless of filter).
+#'   Line-level filtering (not file-level): a file partially covered by the diff
+#'   only has its changed lines tested. Default \code{NULL} (no filtering).
 #' @return A data frame with columns: file, line, original, replacement, outcome.
 #'   The outcome column classifies each mutant as \code{"caught"} (test failure),
 #'   \code{"missed"} (no test failure), \code{"unviable"} (source/load error,
 #'   including missing files or bad R syntax), or \code{"timeout"}.
-# Defensive null-coalesce (avoids rlang dependency)
-`%||%` <- function(x, y) if (is.null(x)) y else x
-
 #' @export
 mutate_test <- function(pkg_path, timeout = NULL, workers = NULL, output_dir = NULL,
-                        iterate = NULL) {
+                        iterate = NULL, in_diff = NULL) {
   pkg_path <- normalizePath(pkg_path, mustWork = TRUE)
 
   # Read .mutantr.toml config and merge with priority: explicit args > config > defaults
@@ -50,6 +55,7 @@ mutate_test <- function(pkg_path, timeout = NULL, workers = NULL, output_dir = N
   if (is.null(workers)) workers <- config$workers %||% 1
   if (is.null(output_dir)) output_dir <- config$output_dir
   if (is.null(iterate)) iterate <- config$iterate %||% FALSE
+  if (is.null(in_diff)) in_diff <- config$in_diff
 
   # Validate iterate requires output_dir
   if (iterate && is.null(output_dir)) {
@@ -93,6 +99,27 @@ mutate_test <- function(pkg_path, timeout = NULL, workers = NULL, output_dir = N
     stop("Baseline tests fail on unmutated package. Fix tests before mutation testing.")
   }
   baseline_time <- baseline$elapsed
+
+  # Apply in_diff filter: restrict to_test to only lines changed in the diff
+  if (!is.null(in_diff)) {
+    if (!file.exists(in_diff)) {
+      stop("in_diff file not found: ", in_diff)
+    }
+    ranges <- parse_diff_ranges(in_diff)
+    to_test <- filter_mutations_by_diff(to_test, ranges)
+    if (nrow(to_test) == 0) {
+      message("No mutation sites found in diff.")
+      out <- data.frame(
+        file = character(),
+        line = integer(),
+        original = character(),
+        replacement = character(),
+        outcome = character(),
+        stringsAsFactors = FALSE
+      )
+      return(out)
+    }
+  }
 
   # Calculate per-mutant timeout (5x baseline, minimum of timeout arg)
   mutant_timeout <- max(timeout, baseline_time * 5)

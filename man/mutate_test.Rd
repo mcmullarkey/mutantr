@@ -4,8 +4,14 @@
 \alias{mutate_test}
 \title{Run mutation testing on an R package}
 \usage{
-mutate_test(pkg_path, timeout = 30, workers = 1, output_dir = NULL,
-  iterate = FALSE)
+mutate_test(
+  pkg_path,
+  timeout = NULL,
+  workers = NULL,
+  output_dir = NULL,
+  iterate = NULL,
+  in_diff = NULL
+)
 }
 \arguments{
 \item{pkg_path}{Path to the root of an R package}
@@ -21,6 +27,12 @@ Default NULL (no file output).}
 \item{iterate}{Logical. If \code{TRUE}, skips previously caught/unviable
 mutants from \code{output_dir/mutant_results.json}. Requires
 \code{output_dir} to be set. Default \code{FALSE}.}
+
+\item{in_diff}{Optional path to a unified diff file. When provided, only
+mutations on lines changed in the diff are tested. The diff file is parsed
+after the baseline test (baseline always runs regardless of filter).
+Line-level filtering (not file-level): a file partially covered by the diff
+only has its changed lines tested. Default \code{NULL} (no filtering).}
 }
 \value{
 A data frame with columns: file, line, original, replacement, outcome.
@@ -38,9 +50,9 @@ and mutates files in-place (reverting after each test).
 If a \code{.mutantr.toml} config file exists in \code{pkg_path}, its values
 are merged with the explicit arguments following this priority:
 explicit args > config > defaults. Only keys that match function parameter
-names (\code{timeout}, \code{workers}, \code{output_dir}, \code{iterate})
-are applied. Config keys for unimplemented features (\code{exclude},
-\code{in_diff}) are accepted but silently ignored.
+names (\code{timeout}, \code{workers}, \code{output_dir}, \code{iterate},
+\code{in_diff}) are applied. Config keys for unimplemented features
+(\code{exclude}) are accepted but silently ignored.
 
 When \code{iterate = TRUE}, the function reads prior results from
 \code{output_dir/mutant_results.json} and skips mutants that were previously
