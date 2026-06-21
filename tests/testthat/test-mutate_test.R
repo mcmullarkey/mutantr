@@ -299,7 +299,7 @@ test_that("unviable_source_error: source/load errors classified as unviable not 
 test_that("render_outcome_section produces byte-identical markdown", {
   df <- data.frame(
     file = c("a.R", "a.R", "b.R"),
-    line = c(10L, 20L, 5L),
+    line = c(20L, 10L, 5L),
     original = c(">", "TRUE", "+"),
     replacement = c("<=", "FALSE", "-"),
     stringsAsFactors = FALSE
@@ -312,14 +312,14 @@ test_that("render_outcome_section produces byte-identical markdown", {
     "### `a.R`", "",
     "| Line | Original | Mutated To |",
     "|------|----------|------------|",
-    "| 10 | `>` | `<=` |",
-    "| 20 | `TRUE` | `FALSE` |", "",
+    "| 20 | `>` | `<=` |",
+    "| 10 | `TRUE` | `FALSE` |", "",
     "### `b.R`", "",
     "| Line | Original | Mutated To |",
     "|------|----------|------------|",
     "| 5 | `+` | `-` |", ""
   )
-  expect_equal(as.character(result), expected)
+  expect_equal(result, expected)
 })
 
 test_that("write_md_report renders both sections via shared helper", {
@@ -365,4 +365,39 @@ test_that("write_md_report renders both sections via shared helper", {
   hdr_matches <- gregexpr("| Line | Original | Mutated To |", md, fixed = TRUE)[[1]]
   expect_equal(length(hdr_matches), 2L,
     info = "Table header must appear exactly twice (once per file; one file per section in this fixture)")
+})
+
+test_that("render_outcome_section honors Does-NOT contracts", {
+  # Does NOT filter: all input rows appear in output
+  df <- data.frame(
+    file = c("a.R", "a.R", "b.R"),
+    line = c(20L, 10L, 5L),
+    original = c(">", "TRUE", "+"),
+    replacement = c("<=", "FALSE", "-"),
+    stringsAsFactors = FALSE
+  )
+  result <- mutantr:::render_outcome_section(df, "## Missed Mutants",
+                                   c("Intro line 1.", "Intro line 2."))
+  expected_len <- 18L
+  expect_length(result, expected_len)
+
+  # Does NOT guard for nrow==0: returns header + intro, no file sections
+  df_empty <- data.frame(
+    file = character(0),
+    line = integer(0),
+    original = character(0),
+    replacement = character(0),
+    stringsAsFactors = FALSE
+  )
+  result_empty <- mutantr:::render_outcome_section(df_empty, "## Title", c("intro"))
+  expect_equal(result_empty, c("## Title", "", "intro", ""))
+
+  # Does NOT write to disk
+  tmp <- tempfile("notodisk_")
+  dir.create(tmp)
+  on.exit(unlink(tmp, recursive = TRUE), add = TRUE)
+  result_no_disk <- mutantr:::render_outcome_section(df, "## Missed Mutants",
+                                           c("Intro line 1.", "Intro line 2."))
+  expect_type(result_no_disk, "character")
+  expect_length(list.files(tmp), 0)
 })

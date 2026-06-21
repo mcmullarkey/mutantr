@@ -112,7 +112,7 @@ write_json_report <- function(results_df, output_dir) {
 #'
 #' @param df data.frame with columns file, line, original, replacement
 #' @param title section heading, e.g. "## Missed Mutants"
-#' @param intro_lines character vector of explanatory text (may be empty)
+#' @param intro_lines character vector of explanatory text (must be non-empty; caller supplies intro)
 #' @return character vector of markdown lines
 #' @noRd
 render_outcome_section <- function(df, title, intro_lines) {
