@@ -1,3 +1,12 @@
+//! Mutation engine for R source code.
+//!
+//! Nested module of the `rmutant` staticlib — inlined from the former
+//! standalone `mutant` crate. Scans R files for mutation sites and applies
+//! operator-based mutations.
+//!
+//! This module is NOT an external crate and is NOT R-facing; extendr
+//! wrapper glue lives in `lib.rs`.
+
 pub mod error;
 pub mod mutate;
 pub mod operators;
