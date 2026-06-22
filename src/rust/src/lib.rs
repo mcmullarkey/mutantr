@@ -1,3 +1,5 @@
+pub mod mutant;
+
 use extendr_api::prelude::*;
 
 /// Scan a single R file for mutation sites. Returns JSON string.
