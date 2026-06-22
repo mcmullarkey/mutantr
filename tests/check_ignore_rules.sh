@@ -22,12 +22,14 @@ gate1_readme_has_bundled_wording() {
 
 gate2_no_stale_mutant_refs() {
     echo "GATE 2: No tracked file contains '../../../mutant' reference..."
-    # Exclude the test scripts themselves and ADR docs which document the change
+    # Exclude test scripts and ADR docs which legitimately reference the old path
     if grep -r '../../../mutant' "$PROJECT_DIR" \
+        --exclude-dir='.git' \
         --include='*.R' --include='*.rs' --include='*.toml' --include='*.md' \
-        --exclude='*/check_self_contained.sh' \
-        --exclude='*/check_ignore_rules.sh' \
-        --exclude='*/0001-inline-mutant-engine.md' \
+        --include='*.sh' --include='*.Rmd' --include='*.c' --include='*.yml' --include='*.json' \
+        --exclude='check_self_contained.sh' \
+        --exclude='check_ignore_rules.sh' \
+        --exclude='0001-inline-mutant-engine.md' \
         2>/dev/null; then
         echo "FAIL: stale '../../../mutant' reference found"
         return 1
@@ -39,15 +41,17 @@ gate3_no_stale_repo_language() {
     echo "GATE 3: No stale language about separate/external/sibling repo in README, R/, man/, tools/..."
     local dirs=("README.md" "R" "man" "tools")
     local found=0
+    local pattern='separate.*repo|external.*repo|sibling.*repo|outside.*repo'
     for d in "${dirs[@]}"; do
         target="$PROJECT_DIR/$d"
         if [ -f "$target" ]; then
-            if grep -rni 'separate.*repo\|external.*repo\|sibling.*repo\|outside.*repo' "$target" 2>/dev/null; then
-                echo "  Found in $d: $match"
+            matches=$(grep -rEini "$pattern" "$target" 2>/dev/null || true)
+            if [ -n "$matches" ]; then
+                echo "  Found in $d: $matches"
                 found=1
             fi
         elif [ -d "$target" ]; then
-            matches=$(grep -rli 'separate.*repo\|external.*repo\|sibling.*repo\|outside.*repo' "$target" 2>/dev/null || true)
+            matches=$(grep -rEli "$pattern" "$target" 2>/dev/null || true)
             if [ -n "$matches" ]; then
                 echo "  Found in $d: $matches"
                 found=1
@@ -116,12 +120,12 @@ gate7_target_in_both() {
         echo "FAIL: .Rbuildignore missing src/rust/target"
         failed=1
     fi
-    # Check some .gitignore (root or src/.gitignore)
+    # Check some .gitignore (root or src/.gitignore) — match path-like patterns
     local found_in_gitignore=0
-    if grep -q 'target' "$PROJECT_DIR/.gitignore" 2>/dev/null; then
+    if grep -qE '(^|/)target' "$PROJECT_DIR/.gitignore" 2>/dev/null; then
         found_in_gitignore=1
     fi
-    if [ -f "$PROJECT_DIR/src/.gitignore" ] && grep -q 'target' "$PROJECT_DIR/src/.gitignore" 2>/dev/null; then
+    if [ -f "$PROJECT_DIR/src/.gitignore" ] && grep -qE '(^|/)target' "$PROJECT_DIR/src/.gitignore" 2>/dev/null; then
         found_in_gitignore=1
     fi
     if [ "$found_in_gitignore" -eq 0 ]; then
@@ -137,7 +141,7 @@ gate7_target_in_both() {
 gate8_no_build_artifacts_tracked() {
     echo "GATE 8: No build artifacts (.o, .so, .dll, target/) tracked in git..."
     local artifacts
-    artifacts=$(cd "$PROJECT_DIR" && git ls-files '*.o' '*.so' '*.dll' '**/target/' 2>/dev/null) || true
+    artifacts=$(cd "$PROJECT_DIR" && git ls-files '*.o' '*.so' '*.dll' '*.a' '*.rlib' '*.d' '**/target/' 2>/dev/null) || true
     if [ -n "$artifacts" ]; then
         echo "FAIL: Build artifacts tracked in git:"
         echo "$artifacts"
