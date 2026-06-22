@@ -1,0 +1,1 @@
+{"timestamp":"2026-06-22T20:00:00Z","feature":"mutantr-batch","phase":"complete","agent":"director","issues":[5,6,7,8,9,10],"prs":[11,12,13,14,"mutant#1","mutant#2"],"batches":3,"features_shipped":6,"output_summary":"6 features shipped in 3 batches: numeric constant mutation, CLI binary, config file, --iterate, --in-diff, function-body replacement. All merged to main/master."}

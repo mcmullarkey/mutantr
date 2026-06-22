@@ -387,8 +387,15 @@ run_mutations_serial <- function(pkg_path, prepared, timeout) {
 
   for (i in seq_len(n)) {
     m <- prepared[i, ]
+    # Escape { and } for cli's glue interpolation — mutation text (e.g.
+    # function-body replacement) may contain braces that cli would otherwise
+    # try to eval() as R expressions, causing a crash.
+    orig_escaped <- gsub("\\{", "{{", m$original)
+    orig_escaped <- gsub("\\}", "}}", orig_escaped)
+    repl_escaped <- gsub("\\{", "{{", m$replacement)
+    repl_escaped <- gsub("\\}", "}}", repl_escaped)
     cli::cli_progress_step(
-      sprintf("[%d/%d] %s:%d  %s -> %s", i, n, m$file, m$line, m$original, m$replacement)
+      sprintf("[%d/%d] %s:%d  %s -> %s", i, n, m$file, m$line, orig_escaped, repl_escaped)
     )
     results[[i]] <- test_mutation_in_place(tmp_pkg, m, timeout)
   }
