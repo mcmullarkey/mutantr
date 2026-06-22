@@ -167,13 +167,9 @@ pub fn scan_source(source: &str, file_name: &str) -> Vec<MutationSite> {
                                             || trimmed == "return (NULL)";
                                         if !is_noop {
                                             // Compute line/col for open_brace position
-                                            let body_line = source[..open_brace]
-                                                .matches('\n')
-                                                .count()
-                                                + 1;
-                                            let body_col = match source[..open_brace]
-                                                .rfind('\n')
-                                            {
+                                            let body_line =
+                                                source[..open_brace].matches('\n').count() + 1;
+                                            let body_col = match source[..open_brace].rfind('\n') {
                                                 Some(p) => open_brace - p,
                                                 None => open_brace + 1,
                                             };
