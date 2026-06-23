@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Predicate test: verify standalone mutant repo archived and local dir deleted.
-# Exits 0 only if all 6 gates pass.
+# Exits 0 only if all 5 gates pass.
 set -euo pipefail
 
 RED='\033[0;31m'
@@ -8,6 +8,11 @@ GREEN='\033[0;32m'
 YELLOW='\033[0;33m'
 NC='\033[0m' # No Color
 FAILED=0
+
+# PRE-FLIGHT: mutant repo working tree was clean before deletion.
+# This check is verified at execution time (before rm -rf).
+# The commit message serves as audit record that the check passed.
+# Post-deletion, we confirm the commit references the pre-flight step.
 
 gate1_check_github_archived() {
     echo "GATE 1: GitHub repo mcmullarkey/mutant is archived..."
@@ -38,7 +43,8 @@ gate3_check_no_stale_path_refs() {
     matches=$(git grep -F '../../../mutant' -- . \
         ':!docs/adr/0001-inline-mutant-engine.md' \
         ':!tests/check_self_contained.sh' \
-        ':!tests/check_ignore_rules.sh' 2>/dev/null || true)
+        ':!tests/check_ignore_rules.sh' \
+        ':!tests/check_archive_cleanup.sh' 2>/dev/null || true)
     if [ -n "$matches" ]; then
         echo -e "  ${RED}FAIL${NC}: stale references found:"
         echo "$matches"
@@ -62,15 +68,11 @@ gate5_check_cargo_build() {
         echo -e "  ${RED}FAIL${NC}: cargo build failed"
         return 1
     fi
+    if ! git diff --exit-code src/rust/Cargo.lock >/dev/null 2>&1; then
+        echo -e "  ${RED}FAIL${NC}: cargo build mutated Cargo.lock"
+        return 1
+    fi
     echo -e "  ${GREEN}OK${NC}"
-}
-
-gate6_check_preflight_clean() {
-    echo "GATE 6: PRE-FLIGHT: mutant repo working tree was clean before deletion..."
-    # This gate is verified at execution time (before rm -rf).
-    # The commit message serves as audit record that the check passed.
-    # Post-deletion, we confirm the commit references the pre-flight step.
-    echo -e "  ${YELLOW}INFO${NC}: verified at execution time (see commit log)"
 }
 
 echo "=== Archive cleanup predicate checks ==="
@@ -85,8 +87,6 @@ echo ""
 gate4_check_lock_no_mutant_package || FAILED=1
 echo ""
 gate5_check_cargo_build || FAILED=1
-echo ""
-gate6_check_preflight_clean || FAILED=1
 echo ""
 
 if [ "$FAILED" -eq 1 ]; then
