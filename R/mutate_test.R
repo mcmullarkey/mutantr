@@ -475,17 +475,12 @@ test_mutation_in_place <- function(pkg_copy, mutation, timeout) {
 
   writeLines(original_content, r_file)
 
-  outcome <- if (test_result$timeout) {
-    "timeout"
-  } else if (isTRUE(test_result$source_error)) {
-    "unviable"
-  } else if (isTRUE(test_result$error)) {
-    "caught"
-  } else if (!test_result$passed) {
-    "caught"
-  } else {
-    "missed"
-  }
+  outcome <- mutant_classify_outcome(
+    timeout = isTRUE(test_result$timeout),
+    source_error = isTRUE(test_result$source_error),
+    error = isTRUE(test_result$error),
+    passed = isTRUE(test_result$passed)
+  )
 
   data.frame(
     file = mutation$file, line = mutation$line,

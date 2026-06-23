@@ -64,6 +64,25 @@ pub enum Outcome {
     Timeout,
 }
 
+/// Classify a mutation test result based on four boolean signals.
+///
+/// Precedence (highest first):
+/// 1. `timeout` → `Outcome::Timeout`
+/// 2. `source_error` → `Outcome::Unviable`
+/// 3. `error || !passed` → `Outcome::Caught`
+/// 4. else → `Outcome::Missed`
+pub fn classify(source_error: bool, passed: bool, timeout: bool, error: bool) -> Outcome {
+    if timeout {
+        Outcome::Timeout
+    } else if source_error {
+        Outcome::Unviable
+    } else if error || !passed {
+        Outcome::Caught
+    } else {
+        Outcome::Missed
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -84,5 +103,21 @@ mod tests {
         assert_eq!(site.original, "==");
         assert_eq!(site.replacements, vec!["!="]);
         assert_eq!(site.location.line, 1);
+    }
+
+    #[test]
+    fn classify_all_outcomes() {
+        // timeout trumps all
+        assert_eq!(classify(false, true, true, false), Outcome::Timeout);
+        // source_error trumps error and !passed
+        assert_eq!(classify(true, false, false, true), Outcome::Unviable);
+        // error → caught
+        assert_eq!(classify(false, false, false, true), Outcome::Caught);
+        // !passed → caught
+        assert_eq!(classify(false, false, false, false), Outcome::Caught);
+        // passed with no errors → missed
+        assert_eq!(classify(false, true, false, false), Outcome::Missed);
+        // timeout + source_error → timeout wins
+        assert_eq!(classify(true, true, true, true), Outcome::Timeout);
     }
 }

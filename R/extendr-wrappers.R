@@ -48,5 +48,18 @@ mutant_apply <- function(source, span_start, span_end, original, replacement) .C
 #' @return JSON string with all mutations and their pre-applied content
 mutant_prepare_all <- function(path) .Call(wrap__mutant_prepare_all, path)
 
+#' Classify a mutation test outcome from R-side test result signals.
+#'
+#' Accepts R-side argument order (timeout, source_error, error, passed)
+#' and calls `mutant::types::classify` which uses Rust-side order.
+#' Returns a lowercase string for direct use by R consumers.
+#' @export
+#' @param timeout Logical: did the test time out?
+#' @param source_error Logical: was there a source/load error?
+#' @param error Logical: was there a test runner error?
+#' @param passed Logical: did the tests pass?
+#' @return Lowercase outcome string: "timeout", "unviable", "caught", or "missed"
+mutant_classify_outcome <- function(timeout, source_error, error, passed) .Call(wrap__mutant_classify_outcome, timeout, source_error, error, passed)
+
 
 # nolint end

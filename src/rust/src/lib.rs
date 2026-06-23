@@ -92,6 +92,27 @@ fn mutant_prepare_all(path: &str) -> String {
     }
 }
 
+/// Classify a mutation test outcome from R-side test result signals.
+///
+/// Accepts R-side argument order (timeout, source_error, error, passed)
+/// and calls `mutant::types::classify` which uses Rust-side order.
+/// Returns a lowercase string for direct use by R consumers.
+/// @export
+/// @param timeout Logical: did the test time out?
+/// @param source_error Logical: was there a source/load error?
+/// @param error Logical: was there a test runner error?
+/// @param passed Logical: did the tests pass?
+/// @return Lowercase outcome string: "timeout", "unviable", "caught", or "missed"
+#[extendr]
+fn mutant_classify_outcome(timeout: bool, source_error: bool, error: bool, passed: bool) -> String {
+    match mutant::types::classify(source_error, passed, timeout, error) {
+        mutant::types::Outcome::Caught => "caught".to_string(),
+        mutant::types::Outcome::Missed => "missed".to_string(),
+        mutant::types::Outcome::Unviable => "unviable".to_string(),
+        mutant::types::Outcome::Timeout => "timeout".to_string(),
+    }
+}
+
 extendr_module! {
     mod mutantr;
     fn mutant_scan_file;
@@ -99,4 +120,5 @@ extendr_module! {
     fn mutant_scan_source;
     fn mutant_apply;
     fn mutant_prepare_all;
+    fn mutant_classify_outcome;
 }
