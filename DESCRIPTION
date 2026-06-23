@@ -3,6 +3,8 @@ Title: Mutation Testing for R Packages
 Version: 0.0.0.9000
 Authors@R:
     person("First", "Last", , "first.last@example.com", role = c("aut", "cre"))
+Author: First Last
+Maintainer: First Last <first.last@example.com>
 Description: Fast mutation testing engine for R packages. Scans R source code
     for mutable operators (comparison, boolean, arithmetic, logical) and
     generates mutated variants to test against your test suite. Powered by a

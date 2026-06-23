@@ -145,7 +145,7 @@ mutate_test <- function(pkg_path, timeout = NULL, workers = NULL, output_dir = N
   cli::cli_h2("Mutation Testing Results")
   cli::cli_text("{nrow(out)} mutants tested")
   for (nm in names(counts)) {
-    cli::cli_bullets(setNames(paste0(counts[[nm]], " ", nm), "*"))
+    cli::cli_bullets(stats::setNames(paste0(counts[[nm]], " ", nm), "*"))
   }
 
   if (!is.null(output_dir)) {

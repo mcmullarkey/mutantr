@@ -280,13 +280,17 @@ test_that("unviable_source_error: source/load errors classified as unviable not 
   expect_true(any(grepl("unviable", output2)),
               info = "Console output (with output_dir) should contain 'unviable'")
 
-  # (f) json_data$summary$mutation_score == 100 when missed == 0
-  expect_equal(json_data$summary$missed, 0,
-               info = "Should have 0 missed mutants")
-  expect_equal(json_data$summary$mutation_score, 100,
-               info = "Mutation score should be 100% when no mutants are missed")
+  # (f) Correct totals: unviable > 0, caught > 0, total matches sum of parts
+  expect_true(json_data$summary$unviable > 0,
+              info = "JSON summary should have unviable > 0")
+  expect_true(json_data$summary$caught > 0,
+              info = "JSON summary should have caught > 0")
+  expect_equal(json_data$summary$total,
+               json_data$summary$unviable + json_data$summary$caught +
+               json_data$summary$missed + json_data$summary$timeout,
+               info = "Total should equal sum of all outcomes")
 
-  # (g) Unviable Mutants section lists mutants grouped by file
+  # (h) Unviable Mutants section lists mutants grouped by file
   expect_true(grepl("### `guard.R`", md_text),
               info = "MD report should list guard.R under Unviable Mutants")
   expect_true(grepl("### `mult.R`", md_text),

@@ -4,3 +4,7 @@
 ^src/rust/tests$
 ^src/Makevars$
 ^src/Makevars\.win$
+^\.git$
+^\.roborev\.toml$
+^\.opencode$
+^tools/
