@@ -476,10 +476,10 @@ test_mutation_in_place <- function(pkg_copy, mutation, timeout) {
   writeLines(original_content, r_file)
 
   outcome <- mutant_classify_outcome(
-    timeout = test_result$timeout,
+    timeout = isTRUE(test_result$timeout),
     source_error = isTRUE(test_result$source_error),
     error = isTRUE(test_result$error),
-    passed = test_result$passed
+    passed = isTRUE(test_result$passed)
   )
 
   data.frame(
