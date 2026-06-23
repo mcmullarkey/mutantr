@@ -246,7 +246,7 @@ cli_main <- function(args) {
 
   # Fast path: --version
   if (isTRUE(parsed$version)) {
-    cat(as.character(packageVersion("mutantr")), "\n")
+    cat(as.character(utils::packageVersion("mutantr")), "\n")
     quit(status = 0L)
   }
 
