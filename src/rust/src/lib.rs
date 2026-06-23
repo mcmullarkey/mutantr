@@ -46,7 +46,13 @@ fn mutant_scan_source(source: &str, file_name: &str) -> String {
 /// @param replacement The replacement text
 /// @return Mutated source text, or error string
 #[extendr]
-fn mutant_apply(source: &str, span_start: i32, span_end: i32, original: &str, replacement: &str) -> String {
+fn mutant_apply(
+    source: &str,
+    span_start: i32,
+    span_end: i32,
+    original: &str,
+    replacement: &str,
+) -> String {
     let mutation = mutant::types::Mutation {
         site: mutant::types::MutationSite {
             location: mutant::types::Location {

@@ -27,8 +27,8 @@ pub fn apply_mutation(source: &str, mutation: &Mutation) -> Result<MutatedSource
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use super::super::types::{Location, MutationKind, MutationSite, Span};
+    use super::*;
 
     fn make_mutation(start: usize, end: usize, original: &str, replacement: &str) -> Mutation {
         Mutation {
