@@ -4,7 +4,7 @@ Mutation testing for R packages, powered by Rust.
 
 mutantr introduces small changes (mutants) to your R source code — flipping `==` to `!=`, swapping `TRUE` for `FALSE`, replacing `+` with `-` — then runs your test suite against each one. If your tests catch the mutant, great. If they don't, you've found a gap in your test coverage.
 
-The core engine is written in Rust and exposed to R via [extendr](https://extendr.github.io/), so scanning and mutation generation are near-instant even on large packages. Test execution runs in parallel across multiple workers, bringing a 111-mutant package from ~3 minutes down to ~25 seconds on 4 cores.
+The core engine is written in Rust and bundled directly with this package — no external checkout needed. It's exposed to R via [extendr](https://extendr.github.io/), so scanning and mutation generation are near-instant even on large packages. Test execution runs in parallel across multiple workers, bringing a 111-mutant package from ~3 minutes down to ~25 seconds on 4 cores.
 
 ## Install
 
