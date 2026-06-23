@@ -12,7 +12,7 @@ The core engine is written in Rust and bundled directly with this package — no
 pak::pak("mcmullarkey/mutantr")
 ```
 
-Requires Rust toolchain (`rustc >= 1.65.0` and `cargo`). Install via [rustup](https://rustup.rs/) if you don't have it.
+Requires Rust toolchain (`rustc >= 1.65.0` and `cargo`). Install via [rustup](https://rustup.rs/) if you don't have it. The package builds and installs end-to-end via [rextendr](https://github.com/extendr/rextendr) and passes `R CMD check`.
 
 ## Usage
 
@@ -31,6 +31,17 @@ results <- mutate_test("path/to/your/package", workers = 4, output_dir = "report
 ```
 
 This produces `mutant_results.md` (a readable summary with missed mutants grouped by file) and `mutant_results.json` (machine-readable, suitable for feeding into an AI agent to generate targeted tests).
+
+## Classifying outcomes
+
+`mutant_classify_outcome()` exposes the Rust-backed classifier the engine uses internally, so downstream tools can map raw boolean signals to an outcome without re-implementing the precedence rules:
+
+```r
+mutant_classify_outcome(timeout = FALSE, source_error = FALSE, error = FALSE, passed = TRUE)
+#> "missed"
+```
+
+It returns one of `"caught"`, `"missed"`, `"unviable"`, or `"timeout"`, with precedence `timeout` > `source_error` > (`error` or not `passed`) > `missed`.
 
 ## Mutation operators
 
