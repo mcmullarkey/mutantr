@@ -23,14 +23,11 @@ gate1_readme_has_bundled_wording() {
 gate2_no_stale_mutant_refs() {
     echo "GATE 2: No tracked file contains '../../../mutant' reference..."
     # Exclude test scripts and ADR docs which legitimately reference the old path
-    if grep -r '../../../mutant' "$PROJECT_DIR" \
-        --exclude-dir='.git' \
-        --include='*.R' --include='*.rs' --include='*.toml' --include='*.md' \
-        --include='*.sh' --include='*.Rmd' --include='*.c' --include='*.yml' --include='*.json' \
-        --exclude='check_self_contained.sh' \
-        --exclude='check_ignore_rules.sh' \
-        --exclude='0001-inline-mutant-engine.md' \
-        2>/dev/null; then
+    if (cd "$PROJECT_DIR" && git grep -n '../../../mutant' -- . \
+        ':!docs/adr/0001-inline-mutant-engine.md' \
+        ':!tests/check_self_contained.sh' \
+        ':!tests/check_ignore_rules.sh' \
+        2>/dev/null); then
         echo "FAIL: stale '../../../mutant' reference found"
         return 1
     fi
@@ -141,7 +138,7 @@ gate7_target_in_both() {
 gate8_no_build_artifacts_tracked() {
     echo "GATE 8: No build artifacts (.o, .so, .dll, target/) tracked in git..."
     local artifacts
-    artifacts=$(cd "$PROJECT_DIR" && git ls-files '*.o' '*.so' '*.dll' '*.a' '*.rlib' '*.d' '**/target/' 2>/dev/null) || true
+    artifacts=$(cd "$PROJECT_DIR" && git ls-files '*.o' '*.so' '*.dll' '*.a' '*.rlib' '*.d' 'src/rust/target/*' 2>/dev/null) || true
     if [ -n "$artifacts" ]; then
         echo "FAIL: Build artifacts tracked in git:"
         echo "$artifacts"
