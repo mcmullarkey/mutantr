@@ -197,20 +197,22 @@ test_that("unviable_source_error: source/load errors classified as unviable not 
 
   writeLines('exportPattern("^[[:alpha:]]+")', file.path(pkg_dir, "NAMESPACE"))
 
-  # guard.R: + (Arithmetic) and != (Comparison)
-  #   != mutation → stopifnot(FALSE) → source error → unviable
+  # guard.R: + (Arithmetic) and == (Comparison)
+  #   == mutation → stopifnot(FALSE) → source error → unviable
+  #   numeric literal mutation → guard result flips → source error → unviable
   #   +  mutation → function body change → tests fail → caught
   writeLines(c(
     "add <- function(x, y) { x + y }",
-    "stopifnot(add(1, 2) != 4)"
+    "stopifnot(add(1, 2) == 3)"
   ), file.path(pkg_dir, "R", "guard.R"))
 
-  # mult.R: * (Arithmetic) and > (Comparison)
-  #   > mutation → stopifnot(FALSE) → source error → unviable
+  # mult.R: * (Arithmetic) and == (Comparison)
+  #   == mutation → stopifnot(FALSE) → source error → unviable
+  #   numeric literal mutation → guard result flips → source error → unviable
   #   * mutation → function body change → tests fail → caught
   writeLines(c(
     "mult <- function(x, y) { x * y }",
-    "stopifnot(mult(2, 3) > 0)"
+    "stopifnot(mult(2, 3) == 6)"
   ), file.path(pkg_dir, "R", "mult.R"))
 
   # Tests that catch function body mutations but not guard mutations
@@ -244,14 +246,24 @@ test_that("unviable_source_error: source/load errors classified as unviable not 
   expect_true(sum(results$outcome == "caught") > 0,
               info = "Should have at least one caught mutant")
 
-  # (b) unviable rows correspond to guard-expression sites (line 2 in each file),
-  #     caught rows correspond to function-body sites (line 1)
+  # (b) unviable rows originate from guard-involved sites (line 2) OR from
+  #     function-body sites (line 1) where the body mutation changes the
+  #     function output such that the guard expression evaluates to FALSE
+  #     at source-load time. Caught rows originate from function-body sites
+  #     (line 1) where the body mutation changes function behavior but the
+  #     guard still passes, so the test suite catches it.
   unviable <- results[results$outcome == "unviable", ]
   caught <- results[results$outcome == "caught", ]
-  expect_true(all(unviable$line == 2),
-              info = "Unviable mutants should be on guard/stopifnot lines (line 2)")
+  expect_true(any(unviable$line == 2),
+              info = "At least some unviable mutants should be on guard/stopifnot lines (line 2)")
   expect_true(all(caught$line == 1),
               info = "Caught mutants should be on function-body lines (line 1)")
+  # Guard-line mutations should ALL be unviable (tight == guard means any
+  # change to a numeric literal or comparison operator flips the result)
+  guard_line_unviable <- unviable[unviable$line == 2, ]
+  expect_equal(nrow(guard_line_unviable),
+               sum(results$line == 2),
+               info = "All guard-line mutations should be unviable")
 
   # Now test with output_dir for JSON and MD report assertions
   out_dir <- tempfile("report_output")
@@ -289,6 +301,13 @@ test_that("unviable_source_error: source/load errors classified as unviable not 
                json_data$summary$unviable + json_data$summary$caught +
                json_data$summary$missed + json_data$summary$timeout,
                info = "Total should equal sum of all outcomes")
+
+  # (g) No missed mutants: guard-stopifnot mutations are all unviable, not missed
+  #     and mutation score should be 100% because all detectable mutants are caught
+  expect_equal(json_data$summary$missed, 0,
+               info = "Should have zero missed mutants — guard mutations are unviable, body mutations are caught")
+  expect_equal(json_data$summary$mutation_score, 100,
+               info = "Mutation score should be 100 — all caught or unviable, none missed")
 
   # (h) Unviable Mutants section lists mutants grouped by file
   expect_true(grepl("### `guard.R`", md_text),

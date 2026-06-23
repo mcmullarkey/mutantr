@@ -7,4 +7,4 @@
 ^\.git$
 ^\.roborev\.toml$
 ^\.opencode$
-^tools/
+^tools/verify_build\.R$
